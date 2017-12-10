@@ -10,6 +10,7 @@ from TopCompiler import MethodParser
 from TopCompiler import Struct
 from TopCompiler import Enum
 from collections import OrderedDict as ODict
+from TopCompiler import Lens
 
 checkTyp = []
 
@@ -47,15 +48,19 @@ def infer(parser, tree):
                 if type(i) is Tree.FuncBody:
                     if i.method:
                         parser.func.append(parser.package+"."+i.name[:i.name.find("_")])
-                    else:
-                        parser.func.append(parser.package+"."+i.name.replace("_", "."))
+
+                    parser.func.append(parser.package+"."+i.name.replace("_", "."))
 
                 loop(i, o_iter)
 
                 if type(i) is Tree.FuncBody and len(parser.func) > 0:
+                    if i.method:
+                        parser.func.pop()
                     parser.func.pop()
 
-            if type(i) is Tree.Lambda:
+            if type(i) is Tree.Lens:
+                Lens.typeCheckLens(parser, i)
+            elif type(i) is Tree.Lambda:
 
                 if not i.returnTyp:
                     if len(i.nodes) > 0:
@@ -78,6 +83,8 @@ def infer(parser, tree):
                             gen[d] = genInC[d]
                     else:
                         args.append(c)
+
+
 
                 if type(returnTyp) is Types.Unknown and not returnTyp.typ:
                     i.error("Cannot infer return type of this function")
@@ -105,9 +112,12 @@ def infer(parser, tree):
                 gen = processGen
                 #"""
 
+
+
                 i.args = []
                 i.returnTyp = 0
                 i.type = Types.replaceT(Types.FuncPointer(args, returnTyp, do=i.do, generic=gen), replaces, unknown = True)
+
                 i.nodes[1].returnType = i.type.returnType
 
                 i.nodes[1].do = i.do
@@ -161,6 +171,8 @@ def infer(parser, tree):
 
                     def recur(typ, pattern):
                         if type(pattern) is Tree.Tuple:
+                            if not typ.isType(Types.Tuple):
+                                node.error("expecting tuple not "+str(typ))
                             if len(pattern) > len(typ.list):
                                 diff = len(pattern) - len(typ.list)
                                 node.error(diff+" too few values to unpack")
@@ -240,9 +252,9 @@ def infer(parser, tree):
                         i.error("can only have one atom per application")
 
                 if not (type(i.owner) is Tree.Assign and type(i.owner.owner) is Tree.InitStruct and i.owner.nodes[0] == i):
-                    if i.name in parser.imports:
+                    if i.name in parser.imports and not i.name in parser.from_imports:
                         if not type(i.owner) is Tree.Field:
-                            i.error("expecting ., cannot directly mention package name")
+                            i.error("expecting . after " + i.name + ", cannot directly mention package name")
                     elif type(i.type) is Tree.Type:
                         i.error("unexpected type "+str(i.type))
 
@@ -348,7 +360,7 @@ def infer(parser, tree):
                             count += 1
                         else: bind()
 
-            elif type(i) is Tree.Operator:
+            elif type(i) is Tree.Operator and not i.kind == "|>":
                 if i.kind == "|>" or i.kind == ">>":
                     self = i
 
@@ -409,10 +421,14 @@ def infer(parser, tree):
                             meth = i.nodes[0].type.types["op_set"]
                         except KeyError:
                             meth = i.nodes[0].type.hasMethod(parser, "op_set")
+                        except IndexError as e:
+                            print(i.nodes)
+                            i.error("can' find nodes[0]")
+
+                        meth.isType(Types.FuncPointer)
 
                         if meth:
                             meth.args[0].duckType(parser, i.nodes[1].type, i.nodes[1], i, 1)
-
                             i.opT = i.nodes[0].type
                         else:
                             i.error("type " + str(i.nodes[0].type) + ", missing method op_set")
@@ -502,7 +518,16 @@ def infer(parser, tree):
 
                 Tree.checkOperator(i, parser)
 
-            elif type(i) is Tree.FuncCall:
+            elif type(i) is Tree.FuncCall or (type(i) is Tree.Operator and i.kind == "|>"):
+                if type(i) is Tree.Operator and i.kind == "|>":
+                    i.nodes.reverse()
+                    newNode = Tree.FuncCall(i)
+                    newNode.nodes = i.nodes
+
+                    i.owner.nodes[count] = newNode
+                    newNode.owner = i.owner
+                    i = newNode
+
                 c = i
 
                 partial = False
@@ -517,8 +542,6 @@ def infer(parser, tree):
 
                 args = i.nodes[0].type.args
                 newArgs = []
-
-
 
                 if args.__len__() < len(i.nodes)-1:
                     c = str(len(i.nodes) - 1 - len(args))
@@ -537,18 +560,26 @@ def infer(parser, tree):
 
                         isGen = Types.isGeneric(myTyp)
 
+                        if i.nodes[0].name == "expectLens":
+                            print("expecting lens")
+
                         if Types.isGeneric(xnormalTyp) or isGen:
+                            if i.nodes[0].name == "xduce":
+                                print("xducing")
                             normalTyp = resolveGen(xnormalTyp, myNode.type, generics, parser, myNode, i)
                             if isGen:
                                 myTyp = Types.replaceT(myTyp, generics)
                         else:
                             normalTyp = xnormalTyp
 
+
                         normalTyp.duckType(parser, myTyp, i, myNode, iter + 1)
 
                 if i.nodes[0].name == "newAtom":
                     i = i.nodes[0]
-                    if parser.dev and parser.hotswap and parser.atomTyp:
+
+                    if parser.dev and parser.hotswap and parser.atomTyp and not parser.run:
+                        print("hotswap")
                         parser.atomTyp.duckType(parser, i.owner.nodes[1].type, i.owner.nodes[1], i, 0)
 
                         f = Tree.Field(0, i.owner.nodes[1].type, i)
@@ -564,19 +595,15 @@ def infer(parser, tree):
                     parser.atomTyp = i.owner.nodes[1].type
                     parser.atoms += 1
 
+
+
                 i = c
 
                 if args.__len__() > len(i.nodes)-1:
                     i.curry = True
 
-                    newGenerics = ODict()
-                    for c in i.nodes[0].type.generic:
-                        if c in generics:
-                            newGenerics[c] = generics[c]
-                        else:
-                            newGenerics[c] = i.nodes[0].type.generic[c]
+                    i.type = Types.replaceT(Types.FuncPointer(args[len(i.nodes)-1:], i.nodes[0].type.returnType, generic=i.nodes[0].type.generic, do = i.nodes[0].type.do), generics)
 
-                    i.type = Types.FuncPointer(args[len(i.nodes)-1:], i.nodes[0].type.returnType, generic=newGenerics, do = i.nodes[0].type.do)
                     #i.type = Types.FuncPointer([Types.replaceT(c, generics) for c in args[len(i.nodes)-1:]], Types.replaceT(i.nodes[0].type.returnType, generics),generic= newGenerics, do= do)
 
                 elif not partial:
@@ -584,6 +611,7 @@ def infer(parser, tree):
                 else:
                     i.partial = True
                     i.type = Types.replaceT(Types.FuncPointer(newArgs, i.nodes[0].type.returnType, do= do), generics)
+
             elif type(i) is Tree.If:
                 ElseExpr.checkIf(parser, i)
             elif type(i) is Tree.Block:
@@ -655,7 +683,12 @@ def infer(parser, tree):
                                         ctype.duckType(parser, typ, c, i, count)
                                         typ = ctype
                                     except EOFError as e:
-                                        err = e
+                                        try:
+                                            u = Types.Union([ctype, typ])
+                                            Types.checkUnion(parser, u)
+                                            typ = ctype
+                                        except EOFError as e:
+                                            err = e
 
                                 if err:
                                     Error.beforeError(err, "Element type in array: ")
@@ -806,9 +839,11 @@ def infer(parser, tree):
                 replace = {v[index]: c for index, c in enumerate(i.generic)}
 
                 for index, c in enumerate(gen):
-                    g = gen[c].type if type(gen[c]) is Types.T else gen[c]
-                    g.duckType(parser, i.generic[index], i.nodes[0], i, 0)
-
+                    if not type(i.generic[index]) is Types.Underscore:
+                        g = gen[c].type if type(gen[c]) is Types.T else gen[c]
+                        g.duckType(parser, i.generic[index], i.nodes[0], i, 0)
+                    else:
+                        del replace[c]
                 i.type = Types.replaceT(i.nodes[0].type, replace)
 
                 #i.nodes[0].type.duckType(parser, i.type, i, i.nodes[0])
@@ -839,6 +874,13 @@ def validate(parser, tree):
         tree.validate(parser)
 
 def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
+    if shouldBeTyp.name == "main.execute.T":
+        #and shouldBeTyp.name == "main._.B":
+        print(normalTyp)
+        print(shouldBeTyp)
+        #and normalTyp.name == "main._.B":
+        print("comparing execute and main.B")
+
     if type(normalTyp) is Types.T and not (normalTyp.owner in parser.func) and normalTyp.name != shouldBeTyp.name:
         if normalTyp.normalName in generics:
             normalTyp = generics[normalTyp.normalName]
@@ -849,7 +891,11 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
 
             generics[normalTyp.normalName] = newTyp
             normalTyp = newTyp
+
             normalTyp = resolveGen(tmp.type, newTyp, generics, parser, myNode, other)
+
+                #print(normalTyp)
+                #print(newTyp)
 
             normalTyp.duckType(parser, newTyp, myNode, other, 0)
             normalTyp = newTyp
@@ -857,13 +903,19 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
     if type(shouldBeTyp) is Types.T:
         if shouldBeTyp.normalName in generics:
             tmp = generics[shouldBeTyp.normalName]
+            normalTyp = Types.replaceT(normalTyp, generics)
+            try:
+                tmp.duckType(parser, normalTyp, myNode, other, 0)
+            except EOFError as e:
+                normalTyp.duckType(parser, tmp, myNode, other, 0)
+
+                generics[shouldBeTyp.normalName] = normalTyp
             return tmp
         else:
             generics[shouldBeTyp.normalName] = normalTyp
             if normalTyp.name != shouldBeTyp.name:
                 tmp = shouldBeTyp.type
                 tmp = resolveGen(tmp, normalTyp, generics, parser, myNode, other)
-
                 tmp.duckType(parser, normalTyp, myNode, other, 0)
             else:
                 tmp = shouldBeTyp
@@ -885,15 +937,17 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
         return t
     elif type(shouldBeTyp) is Types.FuncPointer:
         args = []
-        if not type(normalTyp) is Types.FuncPointer:
-            return shouldBeTyp
+        if not normalTyp.isType(Types.FuncPointer):
+            print("not in type", normalTyp)
+            return Types.replaceT(shouldBeTyp, generics)
 
         if len(shouldBeTyp.args) != len(normalTyp.args):
-            return shouldBeTyp
+            return Types.replaceT(shouldBeTyp, generics)
 
         for (count, (should, nor)) in enumerate(zip(shouldBeTyp.args, normalTyp.args)):
             try:
-                args.append(resolveGen(should, nor, generics, parser, myNode, other))
+                res = resolveGen(nor, should, generics, parser, myNode, other)
+                args.append(Types.replaceT(should, generics))
             except EOFError as e:
                 Error.beforeError(e, "Function type argument "+str(count)+": ")
 
@@ -904,8 +958,20 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
 
         return Types.FuncPointer(args, returnTyp, do=shouldBeTyp.do)
 
-        #return Types.replaceT(shouldBeTyp, generics)
-        #return Types.FuncPointer(args, returnTyp, Types.remainingT(returnTyp), do = shouldBeTyp.do)
+    elif type(shouldBeTyp) is Types.Union:
+        if type(normalTyp) is Types.Union:
+            shouldBeTyp = Types.replaceT(shouldBeTyp, generics)
+            return shouldBeTyp
+        else:
+            shouldBeTyp = Types.replaceT(shouldBeTyp, generics)
+            try:
+                index = shouldBeTyp.different_types.index(normalTyp)
+            except ValueError:
+                return shouldBeTyp
+
+            resolveGen(shouldBeTyp.different_types[index], normalTyp, generics, parser, myNode, other)
+            return Types.replaceT(shouldBeTyp, generics)
+
     elif type(shouldBeTyp) is Types.Tuple:
         if not type(normalTyp) is Types.Tuple:
             return shouldBeTyp
@@ -918,8 +984,10 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
                 Error.beforeError(e, "Tuple element #" + str(key) + ": ")
 
         return Types.Tuple(arr)
-
-    elif type(shouldBeTyp) in [Types.Struct, Types.Enum, Types.Alias]:
+    elif type(shouldBeTyp) is Types.Alias:
+        resolveGen(shouldBeTyp.typ, normalTyp, generics, parser, myNode, other)
+        return Types.replaceT(shouldBeTyp, generics)
+    elif type(shouldBeTyp) in [Types.Struct, Types.Enum]:
         gen = generics
         if not type(normalTyp) is type(shouldBeTyp):
             return shouldBeTyp
@@ -943,9 +1011,6 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
 
         if type(shouldBeTyp) is Types.Enum:
             return Types.Enum(self.package, self.normalName, self.const, generics)
-        elif type(shouldBeTyp) is Types.Alias:
-
-            return Types.Alias(self.package, self.normalName, Types.replaceT(self.typ, generics), generics)
         else:
             return Types.Struct(False, self.normalName, self.types, self.package, generics)
 
@@ -970,6 +1035,7 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
                         types[i] = shouldBeTyp.types[i]
                 except AttributeError:
                     types[i] = shouldBeTyp.types[i]
+
         gen = ODict()
 
         for key in shouldBeTyp.generic:
@@ -977,7 +1043,6 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
 
         #gen = {i: generics[i] for i in generics if ".".join(i.split(".")[:-1]) == shouldBeTyp.normalName}
         r = Types.Interface(False, types, gen, shouldBeTyp.normalName)
-
         return r
     else:
         return shouldBeTyp

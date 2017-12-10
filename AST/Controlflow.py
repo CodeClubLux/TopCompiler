@@ -244,9 +244,13 @@ class Block(Node):
                 i.compileToJS(codegen)
 
             if not self.yielding:
-                codegen.append("return ")
-                self.nodes[-1].compileToJS(codegen)
-                codegen.append(";}")
+                if type(self.nodes[-1]) is Tree.FuncCall and self.nodes[-1].tail and not self.nodes[-1].nodes[0].type.do:
+                    self.nodes[-1].compileToJS(codegen)
+                    codegen.append(";}")
+                else:
+                    codegen.append("return ")
+                    self.nodes[-1].compileToJS(codegen)
+                    codegen.append(";}")
             else:
                 if not AST.yields(self.nodes[-1]): #type(self.nodes[-1]) is Tree.FuncCall and self.nodes[-1].nodes[0].type.do):
                     codegen.append(self.body.res+"=")

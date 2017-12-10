@@ -6,6 +6,24 @@ from .Scope import *
 from .Error import *
 import collections as coll
 
+
+def checkUnion(parser, u):
+    usedTypes = []
+    for i in u.different_types:
+        if type(i) in [Struct, Enum, Union, T]:
+            if type(i) is Union:
+                Error.parseError(parser, "Cannot have union type be one of the possible union types.")
+        elif type(i) in usedTypes:
+            kind = {
+                I32: "int",
+                Interface: "object",
+                String: "string",
+                Bool: "bool",
+            }
+            Error.parseError(parser, "Duplicate kind of type " + kind[type(i)])
+        else:
+            usedTypes.append(type(i))
+
 def parseType(parser, _package= "", _mutable= False, _attachTyp= False, _gen= {}):
 
     def before():
@@ -66,6 +84,7 @@ def parseType(parser, _package= "", _mutable= False, _attachTyp= False, _gen= {}
         elif token == "|":
             parser.nextToken()
 
+
             args = []
             while not (parser.thisToken().token == "|" and parser.lookInfront().token in ["->", "do"]):
                 if parser.thisToken().token == ",":
@@ -73,6 +92,7 @@ def parseType(parser, _package= "", _mutable= False, _attachTyp= False, _gen= {}
                         parseError(parser, "unexpected ,")
                     parser.nextToken()
                     continue
+
                 args.append(parseType(parser))
 
                 parser.nextToken()
@@ -144,11 +164,15 @@ def parseType(parser, _package= "", _mutable= False, _attachTyp= False, _gen= {}
         elif token in parser.structs[package]:
             gen = coll.OrderedDict()
             if attachTyp:
+
                 return parser.structs[package][token]
             if parser.structs[package][token].generic != {}:
                 if parser.nextToken().token != "[":
                     parseError(parser, "must specify generic parameters for generic type")
                 gen = parseGeneric(parser, parser.structs[package][token])
+            elif parser.lookInfront().token == "[":
+                parser.nextToken()
+                parseError(parser, "unexpected [, type isn't generic")
 
             return Struct(mutable, token, parser.structs[package][token]._types, parser.structs[package][token].package, gen)
 
@@ -169,8 +193,25 @@ def parseType(parser, _package= "", _mutable= False, _attachTyp= False, _gen= {}
         if parser.nextToken().token != "}":
             Error.parseError(parser, "expecting }")
         return Assign(res)
+    elif parser.lookInfront().token == "or":
+        parser.nextToken()
+        parser.nextToken()
+        newRes = parseType(parser, _package, _mutable, _attachTyp, _gen)
+        u = Union(combineUnionTypes([res, newRes]))
+
+        checkUnion(parser, u)
+        return u
     else:
         return res
+
+def combineUnionTypes(unions):
+    arr = []
+    for i in unions:
+        if type(i) is Union:
+            arr += combineUnionTypes(i.different_types)
+        else:
+            arr.append(i)
+    return arr
 
 def parseGeneric(parser, typ):
     generic = []
@@ -213,8 +254,8 @@ class Type:
     def __repr__(self):
         return self.name
 
-    def __hash__(self):
-        return id(self)
+    #def __hash__(self):
+    #    return hash(self.name)
 
     def toRealType(self):
         return self
@@ -244,6 +285,12 @@ class Type:
             mynode.error("expecting type "+str(self)+" and got type "+str(other))
     
     def isType(self, other):
+        if type(other) is not type:
+            if type(other) is Unknown:
+                return other.isType(type(self))
+            else:
+                return type(self) is type(other)
+
         return type(self) is other
 
     def hasMethod(self, parser, field): pass
@@ -299,7 +346,7 @@ def newType(n):
 """
 
 class String(Type):
-    def __init__(self, length):
+    def __init__(self, length=0):
         self.name = "string"
         self.types = {"toString": FuncPointer([], self), "toInt": FuncPointer([], I32()), "toFloat": FuncPointer([], Float()),
             "slice": FuncPointer([I32(), I32()], self),
@@ -308,14 +355,15 @@ class String(Type):
             "replace": FuncPointer([self, self], self),
             "toLowerCase": FuncPointer([], self),
             "op_eq": FuncPointer([self], Bool()),
-            "op_add": FuncPointer([self], self)
+            "op_add": FuncPointer([self], self),
+            "op_gt": FuncPointer([self], Bool()),
+            "op_lt": FuncPointer([self], Bool()),
+            "split": FuncPointer([self], Array(False, self)),
+            "get": FuncPointer([Types.I32()], self),
         }
 
 class FuncPointer(Type):
     def __init__(self, argtypes, returnType, generic= coll.OrderedDict(), do= False):
-        if not (type(generic) in [dict,coll.OrderedDict]):
-            raise Error()
-
         self.args = argtypes
         self.name = "|"+", ".join([i.name for i in argtypes])+"| " +  ("do " if do else "-> ") +returnType.name
 
@@ -353,6 +401,9 @@ class FuncPointer(Type):
             except EOFError as e:
                 beforeError(e, "Function type argument "+str(count)+": ")
 
+        #if type(self.returnType) is Types.Null:
+        #    return
+
         try:
             self.returnType.duckType(parser, other.returnType, node, mynode, iter)
         except EOFError as e:
@@ -360,6 +411,61 @@ class FuncPointer(Type):
 
 def isPart(i, name):
     return ".".join(i.split(".")[:-1]) == name
+
+import copy
+
+class Union(Type):
+    def __init__(self, different_types):
+        self.different_types = different_types
+        self.types = {}
+        for type in different_types:
+            for field in type.types:
+                if not field in self.types:
+                    self.types[field] = type.types[field]
+
+            for field in copy.copy(self.types):
+                if not field in type.types:
+                    del self.types[field]
+                else:
+                    if not self.types[field] == type.types[field]: #not sure if should duck type or not
+                        del self.types[field]
+
+        self.name = (" or ").join((str(i) for i in self.different_types))
+
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        if self.name == other.name: return True
+        return other in self.different_types
+
+
+    def duckType(self, parser, other, node, mynode, iter):
+        if other.isType(Union):
+            for typ in self.different_types:
+                if typ in other.different_types:
+                    return
+
+            node.error("Type " + str(other.realType()) + ", isn't " + str(self))
+            return
+
+        for typ in self.different_types:
+            try:
+                if str(other) == "Dict[string,|| do string]":
+                    print("should work")
+                typ.duckType(parser, other, node, mynode, iter)
+                return
+            except EOFError:
+                pass
+
+        node.error("Type "+str(other)+", isn't "+str(self))
+
+    @property
+    def const(self):
+        return self.different_types
+
+    def __str__(self):
+        return (" or ").join((str(i) for i in self.different_types))
 
 class Struct(Type):
     def __init__(self, mutable, name, types, package, gen=coll.OrderedDict()):
@@ -403,7 +509,7 @@ class Struct(Type):
 
         if not other.isType(Struct):
             node.error("expecting type "+str(self)+", not "+str(other))
-        if self.package+"_"+self.normalName != other.package+"_"+other.normalName:
+        if self.package == other.package and self.normalName != other.normalName:
             node.error("expecting type "+str(self)+", not "+str(other))
 
         """
@@ -529,7 +635,6 @@ class Array(Type):
         if other.empty:
             return
 
-
         try:
             self.elemT.duckType(parser, other.elemT, node, mynode, iter)
         except EOFError as e:
@@ -589,19 +694,29 @@ class Interface(Type):
 
         notInField = False
 
-        ended = True
+        ended = False
 
-        for name in self.generic:
-            a = self.generic[name]
-            try:
-                b = other.generic[name]
-            except:
-                ended = False
-                continue
+        if self.normalName == other.normalName and len(self.generic) > 0:
+            for name in self.generic:
+                a = self.generic[name]
+                try:
+                    b = other.generic[name]
+                except:
+                    ended = False
+                    continue
 
-            if not (b.isType(T) and b.owner == self.normalName):
-                if a != b:
-                    mynode.error("For generic parameter " + name + ": " + "Expecting type " + str(a) + ", but got type " + str(b))
+                if not (b.isType(T) and b.owner == self.normalName):
+                    try:
+                        a.duckType(parser, b, node, mynode, iter)
+                    except EOFError:
+                        mynode.error("For generic parameter " + name + ": " + "Expecting type " + str(
+                            a) + ", but got type " + str(b))
+
+                    #if a != b:
+                    #    ended = False
+                    #    break
+                    #    mynode.error("For generic parameter " + name + ": " + "Expecting type " + str(a) + ", but got type " + str(b))
+            return
 
         if ended and len(self.generic) > 0: return
 
@@ -684,6 +799,7 @@ class Enum(Type):
         self.generic = other.generic
         self.gen = other.generic
         self.methods = other.methods
+
         self.name = other.name
         self.const = other.const
         self.package = other.package
@@ -725,12 +841,24 @@ class Enum(Type):
             node.error("expecting type "+self.name+", not "+str(other))
 
         for name in self.remainingGen:
-            a = self.generic[name]
-            b = other.generic[name]
+            try:
+                a = self.generic[name].toRealType()
+            except KeyError:
+                print("generic===")
+                print(self.generic)
+                print(self.remainingGen)
+                mynode.error("Cannot compare " + str(self) + " and " + str(other))
+            b = other.generic[name].toRealType()
 
             if not (b.isType(T) and b.owner == (self.package+"." if self.package != "_global" else "")+self.normalName):
-                if a != b:
-                    mynode.error("For generic parameter "+name+": "+"Expecting type "+str(a)+", but got type "+str(b))
+                if a.isType(Union):
+                    try:
+                        a.duckType(parser, b, node, mynode, iter)
+                    except EOFError as e:
+                        Error.beforeError(e, "For generic parameter "+name+": ")
+                else:
+                    if a != b:
+                        mynode.error("For generic parameter "+name+": "+"Expecting type "+str(a)+", but got type "+str(b))
 
 class Alias(Type):
     def __init__(self, package, name, typ, generic):
@@ -747,6 +875,34 @@ class Alias(Type):
         genericS = "[" + ",".join([str(gen[i]) for i in gen]) + "]" if len(gen) > 0 else ""
 
         self.name = (package + "." if package != "_global" else "") + name + genericS
+
+    @property
+    def args(self):
+        return self.typ.args
+
+    @property
+    def returnType(self):
+        return self.typ.returnType
+
+    @property
+    def list(self):
+        return self.typ.list
+
+    @property
+    def different_types(self):
+        return self.typ.different_types
+
+    @property
+    def empty(self):
+        return self.typ.empty
+
+    @property
+    def elemT(self):
+        return self.typ.elemT
+
+    @property
+    def const(self):
+        return self.typ.const
 
     def toRealType(self):
         return self.typ
@@ -777,7 +933,7 @@ def isGeneric(t, unknown=False):
         return isGeneric(t.returnType)
     elif type(t) is Array and isGeneric(t.elemT): return True
     elif type(t) is T: return True
-    elif type(t) in [Interface, Struct, Alias, Enum]: return t.normalName != t.name
+    elif type(t) in [Interface, Struct, Alias, Enum, Union]: return t.normalName != t.name
     elif type(t) is Tuple:
         for i in t.list:
             if isGeneric(i):
@@ -789,12 +945,17 @@ class Null(Type):
     name = "none"
     types = {}
 
-def remainingT(s):
+def remainingT(s, cache={}):
+    if not str(s) == "type" and str(s) in cache:
+        return cache[str(s)]
+
     args = coll.OrderedDict()
+
     if type(s) is FuncPointer:
         for i in s.args:
             args.update(remainingT(i))
-        args.update(remainingT(s.returnType))
+        cache[str(s)] = args
+        args.update(remainingT(s.returnType, cache))
     elif type(s) is Interface:
         for i in s.types:
             args.update(remainingT(s.types[i]))
@@ -815,7 +976,10 @@ def remainingT(s):
             s.count = 1
 
     elif type(s) is Unknown:
-        args.update(remainingT(s.typ))
+        if s.typ:
+            args.update(remainingT(s.typ))
+
+    cache[str(s)] = args
 
     return args
 
@@ -900,43 +1064,62 @@ class Underscore(Type):
     name = "_"
     normalName = "_"
 
-
 def replaceT(typ, gen, acc=False, unknown=False): #with bool replaces all
     if not acc:
         acc = {}
 
     isGen = isGeneric(typ, unknown)
 
-    if typ in acc:
-        return acc[typ]
+    if str(typ) in acc:
+        return acc[str(typ)]
 
     if unknown and type(typ) is Unknown:
+        if not typ.typ:
+            return typ
         return replaceT(typ.typ, gen, acc, unknown)
 
     if type(typ) is T:
         if typ.normalName in gen:
             r = gen[typ.normalName]
-            acc[typ] = r
+            acc[str(typ)] = r
             if type(r) is Underscore:
                 #if type(typ.type) is Assign:
                 return T(typ.realName, replaceT(typ.type, gen, acc), typ.owner)
                 #return typ
-
-            return replaceT(r, gen, acc, unknown)
+            if unknown:
+                return r
+            else:
+                return replaceT(r, gen, acc, unknown)
         else:
             #if type(typ.type) is Assign:
             return T(typ.realName, replaceT(typ.type, gen, acc, unknown), typ.owner)
             #return typ
     elif type(typ) is Struct:
-        rem = {}
+        rem = gen
         for i in typ.remainingGen:
             rem[i] = replaceT(typ.remainingGen[i], gen, acc, unknown)
-        return Struct(False, typ.normalName, typ.types, typ.package, rem)
+
+        s = Struct(False, typ.normalName, typ.types, typ.package, rem)
+
+        return s
+    elif type(typ) is Union:
+        arr = []
+        for i in typ.different_types:
+            arr.append(Types.replaceT(i, gen, acc, unknown))
+        return Union(arr)
     elif type(typ) is Alias:
         rem = {}
         for i in typ.generic:
             rem[i] = replaceT(typ.generic[i], gen, acc)
-        return Alias(typ.package, typ.normalName, replaceT(typ.typ, gen, acc, unknown), rem)
+
+        if unknown:
+            a = Alias(typ.package, typ.normalName, Types.replaceT(typ.typ, gen, acc, unknown), rem)
+        else:
+            a = Alias(typ.package, typ.normalName, Types.Null(), rem)
+            acc[str(a)] = a
+            a.typ = replaceT(typ.typ, gen, acc, unknown)
+            a.types = a.typ.types
+        return a
     elif type(typ) is Assign:
         return Assign(replaceT(typ.const, gen, acc, unknown))
     elif type(typ) is Interface:
@@ -944,14 +1127,13 @@ def replaceT(typ, gen, acc=False, unknown=False): #with bool replaces all
 
         c = Interface(False,{})
 
-        if acc == {}:
-            acc = {typ: c}
-        else:
-            acc[typ] = c
+        acc[str(typ)] = c
 
         types = {i: replaceT(types[i], gen, acc, unknown) for i in types}
-
-        c.fromObj(Interface(False, types, gen, typ.normalName))
+        newGen = gen
+        for i in typ.generic:
+            newGen[i] = replaceT(typ.generic[i], gen, acc, unknown)
+        c.fromObj(Interface(False, types, newGen, typ.normalName))
         return c
     elif type(typ) is Enum:
         const = coll.OrderedDict()
@@ -959,15 +1141,12 @@ def replaceT(typ, gen, acc=False, unknown=False): #with bool replaces all
 
         c = Enum(typ.package, typ.normalName, const, g)
 
-        if acc == {}:
-            acc = {typ: c}
-        else:
-            acc[typ] = c
+        acc[str(typ)] = c
 
         for name in typ.const:
             const[name] = [replaceT(i, gen, acc, unknown) for i in typ.const[name]]
 
-        for name in typ.generic:
+        for name in typ.remainingGen:
             g[name] = replaceT(typ.generic[name], gen, acc, unknown)
 
         c.fromObj(Enum(typ.package, typ.normalName, const, g))

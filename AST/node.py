@@ -117,6 +117,11 @@ class Node(Root):  # partially immutable data structure
         self.owner = None
 
         self.token = parser.thisToken()
+
+        if not type(self.token) is list:
+            self.token.iter = parser.iter
+            self.iter = parser.iter
+
         self.selfpackage = parser.opackage
         self.opackage = parser.opackage
 
@@ -137,7 +142,10 @@ class Node(Root):  # partially immutable data structure
         Error.errorAst(message, self.selfpackage, self.filename, self.token)
 
     def __str__(self):
-        "root"
+        return "root"
+
+    def __repr__(self):
+        return str(self) + (repr(self.nodes) if len(self.nodes) > 0 else "")
 
     def __len__(self):
         return len(self.nodes)

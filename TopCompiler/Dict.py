@@ -16,8 +16,8 @@ V = T("V", Interface(False,{}), "Dict")
 
 def dictTyp(K,V):
     generic = coll.OrderedDict([
-        ("K", K),
-        ("V", V),
+        ("Dict.K", K),
+        ("Dict.V", V),
     ])
 
     d = Interface(False,{
@@ -32,7 +32,7 @@ def dictTyp(K,V):
 topDict = dictTyp(K,V)
 
 K_ = T("K", key_interface,"dict")
-V_ = T("K", Interface(False,{}),"dict")
+V_ = T("V", Interface(False,{}),"dict")
 
 dictFunc = FuncPointer([Array(False, Tuple([K_,V_]))], dictTyp(K_,V_), generic=coll.OrderedDict([
     ("K", K_),

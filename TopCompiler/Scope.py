@@ -10,6 +10,7 @@ class Type :
         self.imutable = imutable
         self.type = type
         self.target = target
+        self.imported = False
 
     def __repr__(self):
         return str(self.type)
@@ -75,7 +76,7 @@ def isMutable(parser, package, name):
         except KeyError: pass
 
 def typeOfVar(node, parser, package, name):
-    if name in parser.imports: return Types.Package()
+    if name in parser.imports and not name in parser.from_imports: return Types.Package()
     if package == parser.package:
         for i in parser.scope["_global"]:
             if name in i:
@@ -102,7 +103,7 @@ def targetOfVar(node, parser, package, name):
     node.error("variable "+name+" does not exist")
 
 def packageOfVar(parser, package, name):
-    if name in parser.imports: return ""
+    if name in parser.imports and not name in parser.from_imports: return ""
     if package == parser.package:
         for i in parser.scope["_global"]:
             if name in i:

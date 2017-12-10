@@ -18,6 +18,7 @@ def externVar(parser):
         Error.parseError(parser, target+" is not a valid compilation target")
 
     VarParser.createAndAssignParser(parser)
+
     parser.currentNode.nodes[-1].extern = True
     parser.currentNode.nodes[-1].global_target = target
     parser.currentNode.nodes[-1].nodes[1].extern = True

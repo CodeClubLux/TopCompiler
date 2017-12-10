@@ -28,7 +28,6 @@ def index(parser, name):
     parser.currentNode.nodes.pop()
 
     parser.nextToken()
-
     VarParser.read(parser, parser.thisToken().token, package= name)
 
 

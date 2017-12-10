@@ -110,28 +110,32 @@ def getCompilationFiles(target):
         nodeLinkWithFiles = []
 
         for root, dirs, files in os.walk(dir, topdown=False, followlinks=True):
+
+
             for i in files:
                 if root == start and i != "port.json" and i.endswith(".top"):
-                    package = i[:-4]
-                    file[package] = [(root, i)]
+                    _package = i[:-4]
+                    file[_package] = [(root, i)]
                     #file[package].append((root, f + ".top"))
+
+            files = []
+            if root.endswith("node_modules") or "/node_modules/" in root:
+                continue
 
             package = root
             if package == start: continue
-            package = package[package.find("src/")+len("src/"):]
+            package = package[package.find("src/") + len("src/"):]
 
             if package in file and not package == "main":
-                Error.error("multiple packages named "+package)
+                Error.error("multiple packages named " + package)
 
             file[package] = []
 
             try:
-                port = open(start+package+"/port.json", mode= "r")
+                port = open(start + package + "/port.json", mode="r")
             except:
                 continue
-                Error.error("missing file port.json in package "+package+"")
 
-            files = []
             try:
                 j = json.loads(port.read())
                 port.close()
@@ -361,6 +365,7 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
             declarations.cssFiles = linkCSSWithFiles
             declarations.transforms = transforms
             declarations.usedModules = {}
+            declarations.run = run
 
             global_parser = declarations
 
@@ -404,6 +409,7 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                 parser.package = "main"
                 ResolveSymbols.insert(declarations, parser, only= True)
 
+
                 parser.files = files
                 parser.global_target = target
                 parser.output_target = target
@@ -412,7 +418,6 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                 parser.compiled = declarations.compiled
                 parser.compiled["main"] = None
                 parser.dev = dev
-
                 parsed = parser.parse()
 
                 parser.compiled["main"] = (True, (parsed, []))
@@ -436,8 +441,6 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
 
                 canStartWith = ['']
 
-                order_of_modules = []
-
                 for i in parser.compiled:
                     tmp = os.path.dirname(parser.filenames[i][0][0])
 
@@ -445,11 +448,10 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                     canStartWith.append(dir)
 
                     if parser.compiled[i][0]:
-                        CodeGen.CodeGen(order_of_modules, i, parser.compiled[i][1][0], parser.compiled[i][1][1], target, opt).compile(opt=opt)
+                        CodeGen.CodeGen(i, parser.compiled[i][1][0], parser.compiled[i][1][1], target, opt).compile(opt=opt)
 
-                order_of_modules.append("main")
 
-                for i in parser.lexed:
+                for i in parser.orderOfUsedModules:
                     parser.usedModules[i] = datetime.datetime.now()
 
                 _linkCSSWithFiles = [i for (d, i) in linkCSSWithFiles if d in canStartWith]
@@ -457,10 +459,10 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                 _nodeLinkWithFiles = [i for (d, i) in nodeLinkWithFiles if d in canStartWith]
                 _linkWithFiles = [i for (d, i) in linkWithFiles if d in canStartWith]
 
-                compiled = order_of_modules #parser.compiled
+                compiled = parser.orderOfUsedModules #[i for i in parser.order_of_modules if i in parser.compiled] #order_of_modules #parser.compiled
 
                 if not dev and not _raise:
-                    saveParser.save(parser)
+                    saveParser.save(parser, port=port)
 
                 print("\n======== recompiling =========")
                 print("Compilation took : " + str(time() - time1))
@@ -469,12 +471,19 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                     client_linkWithFiles = _linkWithFiles + _clientLinkWithFiles
                     node_linkWithFiles = _linkWithFiles + _nodeLinkWithFiles
 
-                    a = CodeGen.link(compiled, outputFile, hotswap= hotswap, run= False, debug = debug, opt= opt, dev= dev, linkWithCSS= _linkCSSWithFiles, linkWith= client_linkWithFiles, target="client")
-
                     if run:
+                        a = CodeGen.link(compiled, outputFile, hotswap= hotswap, run= False, debug = debug, opt= opt, dev= dev, linkWithCSS= _linkCSSWithFiles, linkWith= client_linkWithFiles, target="client")
+
                         print("Open website, at", "http://127.0.0.1:3000/")
 
-                    l = CodeGen.link(compiled, outputFile, debug= debug, hotswap= hotswap, run= run, opt= opt, dev=dev, linkWithCSS=_linkCSSWithFiles, linkWith= node_linkWithFiles, target = "node")
+                        l = CodeGen.link(compiled, outputFile, debug= debug, hotswap= hotswap, run= run, opt= opt, dev=dev, linkWithCSS=_linkCSSWithFiles, linkWith= node_linkWithFiles, target = "node")
+                    else:
+                        l = CodeGen.link(compiled, outputFile, debug=debug, hotswap=hotswap, run=run, opt=opt, dev=dev,
+                                         linkWithCSS=_linkCSSWithFiles, linkWith=node_linkWithFiles, target="node")
+                        a = CodeGen.link(compiled, outputFile, hotswap=hotswap, run=False, debug=debug, opt=opt,
+                                         dev=dev, linkWithCSS=_linkCSSWithFiles, linkWith=client_linkWithFiles,
+                                         target="client")
+
                 else:
                     _link_CSSWithFiles = [] if target != "client" else _linkCSSWithFiles
                     _linkWithFiles = _linkWithFiles + _nodeLinkWithFiles if target == "node" else _linkWithFiles + _clientLinkWithFiles if target == "client" else []
@@ -485,8 +494,6 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                 didCompile = True
 
                 parser.didCompile = True
-
-
 
                 return parser
             elif run:
@@ -510,7 +517,7 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
 
         return c
     except (EOFError, ArithmeticError) as e:
-        if dev or _raise:
+        if doc or dev or _raise:
             Error.error(str(e))
         else:
             print(e, file= sys.stderr)

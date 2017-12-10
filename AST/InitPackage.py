@@ -17,9 +17,6 @@ class InitPack(Node):
         else:
             codegen.append(self.package+"_" + self.target + "Init();")
 
-        if not self.package in codegen.order_of_modules:
-            codegen.order_of_modules.append(self.package)
-
     def validate(self, parser): pass
 
 class Import(Node):

@@ -11,7 +11,7 @@ import os
 import copy
 
 class CodeGen:
-    def __init__(self, order_of_modules, filename, tree, externFunctions, target, opt, main=True):
+    def __init__(self, filename, tree, externFunctions, target, opt, main=True):
         self.tree = tree
         self.filename = filename
 
@@ -21,8 +21,6 @@ class CodeGen:
 
         self.out_parts = []
         self.main_parts = []
-
-        self.order_of_modules = order_of_modules
 
         self.global_target = target
         self.target = target
@@ -247,6 +245,11 @@ class CodeGen:
                 Error.error("Compilation failed, " + str(e))
 
 
+
+
+
+
+
 def getRuntime():
     runtimeName = __file__[0:__file__.rfind("/") + 1] + "runtime.js"
     file = open(runtimeName, mode="r")
@@ -281,6 +284,8 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
     linked += runtime
 
     css = ""
+
+
 
     if target == "client" and debug:
             linked += """log= function(d) {
@@ -386,10 +391,14 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
 
     linked += "\n"
 
+    linked += ("var types = {};\n")
+
     for i in filenames:
         f = open("lib/" + i.replace("/", ".") + "-" + target + ".js", mode="r")
+        linked += "\ntypes['" + i + "'] = {};\n"
         linked += f.read()
         f.close()
+
 
     fjs = open("bin/" + output + "-" + target + ".js", mode="w")
 

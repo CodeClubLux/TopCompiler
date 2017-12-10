@@ -60,6 +60,7 @@ keywords = [
         "from",
         "decoder",
         "extension",
+        "is",
     ]
 
 token_specification = [
@@ -95,7 +96,7 @@ token_specification = [
         ('setAtom', '<\-[ ]+'),
         ('operator',  r'(\|>|>>|<-)|[+*\/\-%><^\\]'),
         ('line', r'\|'),
-        ('identifier', r'[^\d\W](\w|(-[^\d\W]))*'),  #[A-Za-z0-9_$]*([A-Za-z0-9_$]*-[A-Za-z_$]+)*
+        ('identifier', r'[^\d\W](\w|(-[^\d\W]))*'),
         ('underscore', '_'),
         ('skip', r'[ \t]'),
         ("single", r"'(?:[^'\\])*'"),

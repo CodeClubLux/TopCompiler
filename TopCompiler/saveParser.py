@@ -2,25 +2,30 @@ import pickle
 import os
 import pprint
 
-def save(parser):
+def save(parser, port=False):
     #return
 
     f = open("lib/parser.p", "wb")
-    parser.rootAst = 0
-    parser.currentNode = 0
-    parser.compiled = []
-    parser.Stringable = 0
-    parser.atomTyp = 0
-    parser._tokens = 0
-    parser.tokens = 0
 
-    """
+    print("port is", port)
+    if port != False:
+        parser.rootAst = 0
+        parser.currentNode = 0
+        parser.compiled = []
+        parser.Stringable = 0
+        parser.atomTyp = 0
+        parser._tokens = 0
+        parser.tokens = 0
+        parser.order = 0
+
     for package in parser.structs:
         for s in parser.structs[package]:
             parser.structs[package][s].node = 0
-
+    """"
     sizes = {}
     for k, v in parser.__dict__.items():
+        print(k)
+        print(v)
         l = len(pickle.dumps(v))
         if l > 50:
             sizes[k] = l
@@ -30,6 +35,7 @@ def save(parser):
     pprint.pprint(list(s))
     print("sizes")
     """
+
 
     pickle.dump(parser, f)
 

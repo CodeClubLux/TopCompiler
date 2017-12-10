@@ -1,7 +1,6 @@
 include TopCompiler/runtime.js
 include TopCompiler/runtime_node.js
 include TopCompiler/terminal/*
-include bin/socketRepl.py
 include setup.cfg
 exclude .gitignore
 recursive-exclude *.egg-info *

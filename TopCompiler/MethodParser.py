@@ -46,10 +46,10 @@ def checkIfOperator(parser, attachTyp, name, func):
         "read": Types.FuncPointer([attachTyp], Types.All, do= True),
     }
 
-    if name.startswith("operator_"):
-        op = name[len("operator_"):]
+    if name.startswith("op_"):
+        op = name[len("op_"):]
         if not op in operators:
-            Error.parseError(parser, "overload not found for operator_"+op)
+            Error.parseError(parser, "overload not found for op_"+op)
 
         try:
             func.duckType(parser, operators[op], Tree.PlaceHolder(parser), Tree.PlaceHolder(parser), 0)

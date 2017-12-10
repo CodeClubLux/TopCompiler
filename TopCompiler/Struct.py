@@ -19,7 +19,8 @@ class Struct:
         self.fieldType = fieldType
 
         self.offsets = {}
-        self.types = {}
+        self.types = {"_fields": Types.Array(False, Types.Tuple([Types.String(), Types.String()]))}
+
         self._types = {}
 
         self.package = package
@@ -103,6 +104,9 @@ def typeParser(parser, decl= False):
             return
 
         Error.parseError(parser, "expecting =")
+
+    parser.structs[parser.package][name].generic = gen
+
     tmp = parser.currentNode
 
     typ = Tree.Type(parser.package, name, parser)
@@ -121,6 +125,7 @@ def typeParser(parser, decl= False):
     fields = parser.currentNode.nodes
 
     typ.fields = [i.name for i in typ]
+    typ.types = parser.structs[parser.package][name]._types
 
     typ.nodes = []
     parser.currentNode = tmp
@@ -157,12 +162,10 @@ def initStruct(parser, package= "", shouldRead=True):
 
         if len(parser.currentNode.nodes) == 0:
             Error.parseError(parser, "unexpected {")
-        if not type(parser.currentNode.nodes[-1]) in [Tree.ReadVar, Tree.Field]:
-            Error.parseError(parser, "unexpected {")
 
-        readVar = type(parser.currentNode.nodes[-1]) is Tree.ReadVar
-
-        name = parser.currentNode.nodes[-1].name if readVar else parser.currentNode.nodes[-1].field
+        if type(parser.currentNode.nodes[-1]) in [Tree.ReadVar, Tree.Field]:
+            readVar = type(parser.currentNode.nodes[-1]) is Tree.ReadVar
+            name = parser.currentNode.nodes[-1].name if readVar else parser.currentNode.nodes[-1].field
 
     init = Tree.InitStruct(parser)
 
@@ -170,8 +173,9 @@ def initStruct(parser, package= "", shouldRead=True):
         if type(parser.currentNode.nodes[-1].nodes[0]) is Tree.ReadVar:
             package = parser.currentNode.nodes[-1].nodes[0].name
             t = (parser.currentNode.nodes[-1].nodes[0])
-            if not package in parser.imports:
-                t.error("no package called " + package)
+            if t.name[0].isupper():
+                if not package in parser.imports:
+                    t.error("no package called " + package)
 
     init.package = package
 

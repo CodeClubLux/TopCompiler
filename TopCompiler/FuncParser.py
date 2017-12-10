@@ -63,7 +63,6 @@ def generics(parser, fname):
     return generic
 
 def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = False):
-    Scope.incrScope(parser)
 
     if parser.tokens[parser.iter+2].token == ".":
         if attachTyp: Error.parseError(parser, "unexpected .")
@@ -81,7 +80,11 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
 
             except KeyError:
                 Error.parseError(parser, "no attachable data structure found, called "+name)
+        Scope.incrScope(parser)
         return funcHead(parser, decl, dontAdd, True, attachTyp)
+    elif not method:
+        Scope.incrScope(parser)
+
     name = parser.nextToken()
 
     if name.type != "identifier":
@@ -199,8 +202,6 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
     header.do = do
 
     if method:
-        Scope.decrScope(parser)
-
         header.method = True
         header.types = types[1:]
         header.attachTyp = attachTyp
@@ -229,6 +230,7 @@ def funcBody(parser, name, names, types, brace, returnType, do):
     body.returnType = returnType
     body.package = parser.package
     body.do = do
+    body.names = names
 
     brace.body = body
 

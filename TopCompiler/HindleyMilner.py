@@ -42,6 +42,10 @@ class FakeList:
         else:
             return self.unknown.getArg(item+self.offset)
 
+    def iter(self):
+        for i in range(self.unknown.lengthOfArgs()):
+            yield self[i]
+
     def __iter__(self):
         return self.iter()
 
@@ -56,6 +60,10 @@ class FakeBool:
     def __eq__(self, other):
         self.unknown.switchDo(other)
         return self.unknown.rDo == other
+
+    def __ne__(self, other):
+        self.unknown.switchDo(other)
+        return self.unknown.rDo != other
 
 state = State()
 state.count = 0
@@ -80,12 +88,19 @@ constraint = {
     Interface: 3,
     Alias: 3,
     T: 3,
+    Union: 4,
 }
 
 isUnknown = -1
 
 
 def unificaction(o_self, o_other, parser):
+    if str(o_other) == "html.onEvent.T":
+        print("changing to html.onEvent.T")
+
+    if str(o_other) == "none":
+        pass
+        #print("none type")
 
 
     if type(o_other) is Unknown:
@@ -182,30 +197,36 @@ class Unknown(Type):
         self.callback = callback
         self.types = FakeDict(self)
         self.type = FakeType()
+        self.length = None
 
         if typ:
             self.typ = typ
             self.name = typ.name
 
     def __str__(self):
-        return "unknown"
+        return self.name
+        #return "unknown"
 
     def lengthOfArgs(self):
         s = self
         class FakeComparison:
             def __lt__(self, other):
+                s.length = other
                 return False
 
             def __ne__(self, other):
+                s.length = other
                 return False #add checks later
 
             def __gt__(self, other):
                 return len(s.typ.args) > other
 
+        if not self.length is None:
+            return self.length
         return FakeComparison()
 
     def contains(self, item):
-        if type(self.typ) in [bool, Interface, T, Enum]:
+        if type(self.typ) in [bool, Types.Interface, Types.T, Types.Enum]:
             return True
         else:
             return item in self.typ.types
@@ -268,6 +289,42 @@ class Unknown(Type):
             return True
         return False
 
+    @property
+    def package(self):
+        if self.typ.package == "":
+            s = self
+            class MockString:
+                def __eq__(self, other):
+                    if s.typ.package != "":
+                        return other == self.typ.package
+                    else:
+                        s.typ.package = other
+                        return True
+
+                def __ne__(self, other):
+                    return not other == self
+
+            return MockString()
+        return self.typ.package
+
+    @property
+    def normalName(self):
+        if self.typ.normalName == "":
+            s = self
+            class MockString:
+                def __eq__(self, other):
+                    if s.typ.normalName != "":
+                        return other == self.typ.normalName
+                    else:
+                        s.typ.normalName = other
+                        return True
+
+                def __ne__(self, other):
+                    return not other == self
+
+            return MockString()
+        return self.typ.normalName
+
     def emulate(self, other):
         if other is FuncPointer:
             def changeReturnType(newTyp):
@@ -291,9 +348,20 @@ class Unknown(Type):
             self.compareType(Enum("", "", {}, {}))
         elif other in [I32, Float, String, Bool]:
             self.compareType(other())
+        elif other is Struct:
+            self.compareType(other(False, "", {}, "")) #todo: implement later
 
     def isType(self, other):
         if other is Unknown: return True
+        if type(other) is not type: other = type(other)
+
+        """print("----")
+        print(other)
+        print(self.typ)
+        print(constraint[other])
+        print(constraint[type(self.typ)])
+        print(constraint[other] < constraint[type(self.typ)])
+    """
 
         if not self.typ or constraint[other] < constraint[type(self.typ)]:
             self.emulate(other)
@@ -322,26 +390,22 @@ class Unknown(Type):
             self.gen = False
 
         if self.typ:
-
             if name in self.typ.types:
                 return self.typ.types[name]
-            else:
-                if name.startswith("op_"):
-                    t = All
-                else:
-                    t = newT(self.parser)
 
-                u = Unknown(self.parser, changeField, typ=t)
-                self.compareType(Interface(False, {name: u}))
-                return u
+        if name in ["op_set", "update", "watch", "unary_read"]:
+            u = Unknown(self.parser, lambda x: 0, All)
+            u.emulate(FuncPointer)
+            u.switchDo(True)
+            u.callback = changeField
         else:
-            if name.startswith("op_") and not name in ["op_set", "update", "watch", "unary_read"]:
+            if name.startswith("op_"):
                 t = All
             else:
                 t = newT(self.parser)
             u = Unknown(self.parser, changeField, typ=t)
-            self.compareType(Interface(False, {name: u}))
-            return u
+        self.compareType(Interface(False, {name: u}))
+        return u
 
     def __eq__(self, other):
         parser = self.parser

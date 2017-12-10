@@ -18,6 +18,8 @@ def parseError(parser, message):
     errorAst(message, package, filename, token)
 
 def errorAst(message, package, filename, token):
+    if message == "type MaybePosAtom type can not be used as a constructor":
+        print("wierd")
     from TopCompiler import topc
     html = '<div class="error">'
 

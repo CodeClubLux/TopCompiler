@@ -150,7 +150,7 @@ class Operator(Node):
 
         codegen.append("(")
 
-        if self.kind == "concat":
+        if self.kind == "concat" and not self.nodes[1].type == Types.String():
             codegen.append("(")
 
         if self.type == Types.I32():
@@ -183,7 +183,7 @@ class Operator(Node):
         if not self.unary:
             codegen.append(op)
             self.nodes[1].compileToJS(codegen)
-            if self.kind == "concat":
+            if self.kind == "concat" and not self.nodes[1].type == Types.String():
                 codegen.append(").toString()")
             if self.kind == "^":
                 codegen.append(")")
@@ -261,7 +261,7 @@ def checkOperator(self, parser):
                 i.name = overloads[i.kind]
                 return
 
-            if type(i.opT) in [Types.Struct, Types.Interface, Types.Enum, Types.T, Types.Array, Types.Unknown]:
+            if type(i.opT) in [Types.Struct, Types.Interface, Types.Enum, Types.T, Types.Array, Types.Unknown, Types.Union]:
                 func = i.opT.hasMethod(parser, overloads[i.kind])
                 if not func:
                     try:

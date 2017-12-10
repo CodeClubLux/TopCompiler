@@ -6,7 +6,6 @@ from TopCompiler import Parser
 from TopCompiler import ResolveSymbols
 from TopCompiler import PackageParser
 from TopCompiler import topc
-import topdev
 
 import AST as Tree
 
@@ -16,13 +15,11 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO
 
 import eventlet
-
 eventlet.monkey_patch()
 
 import logging
 
 app = Flask(__name__)
-
 
 socketio = SocketIO(app, logging=False, async_mode="eventlet")
 

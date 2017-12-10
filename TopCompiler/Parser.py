@@ -99,6 +99,9 @@ from .ParseJson import *
 from .Lambda import *
 from .Dict import *
 from TopCompiler import Module
+from .Alias import *
+
+offsetToList = offsetsToList
 
 def isEnd(parser):
     if parser.thisToken().token == "\n" and parser.stack != [] and parser.stack[-1].kind == "<-" and parser.package == "main":
@@ -237,7 +240,7 @@ def callToken(self, lam= False):
         s1(self)
         returnBookmark(self)
     else:
-        if not lam and Module.shouldCall(b) and (b.token in ["!", "_", "(", "\\", "|", "<-"] or not b.type in ["symbol", "operator", "indent"]) and not b.token in ["as", "in", "not", "and", "or", "then", "with", "do", "else"] and not ExprParser.isUnary(self, self.lookBehind()):
+        if not lam and Module.shouldCall(b) and (b.token in ["!", "_", "(", "\\", "|", "<-"] or not b.type in ["symbol", "operator", "indent"]) and not b.token in ["as", "in", "not", "and", "or", "then", "with", "do", "else", "is"] and not ExprParser.isUnary(self, self.lookBehind()):
             if b.token == "$":
                 ExprParser.endExpr(self, -2)
             addBookmark(self)
@@ -294,7 +297,11 @@ class Parser:  # all mutable state
         self.curlyBookmark = [0]
         self.indentLevel = 0
 
+        self.order_of_modules = []
+        self.orderOfUsedModules = []
+
         self.fired = False
+        self.dev = False
 
         self.lineNumber = 1
         self.stack = []
@@ -373,6 +380,17 @@ class Parser:  # all mutable state
             generic = coll.OrderedDict([("R", Maybe_R)])
         )
 
+        A = Types.T("A", All, "MaybeLens")
+        B = Types.T("B", All, "MaybeLens")
+
+        MaybeLens = Types.Interface(False, {
+            "query": Types.FuncPointer([A], Types.replaceT(Maybe, {"Maybe.T": B})),
+            "set": Types.FuncPointer([A, B], A),
+            "toString": Types.FuncPointer([], Types.String(0))
+        }, coll.OrderedDict([("MaybeLens.A", A), ("MaybeLens.B", B)]), name="MaybeLens")
+
+        self.Maybe = Maybe
+
         assign_T = Types.T("T", All, "assign")
 
         parseT = Types.T("T", All, "parseJson")
@@ -391,6 +409,7 @@ class Parser:  # all mutable state
             "Stringable": Stringable,
             "Atom": Scope.Type(True, Atom),
             "Lens": Scope.Type(True, Lens),
+            "MaybeLens": Scope.Type(True, MaybeLens),
             "All": Scope.Type(True, All),
             "newAtom": Scope.Type(True, Types.FuncPointer([T], Atom, coll.OrderedDict([("Atom.T", T)]))),
             "defer": Scope.Type(True, defer),
@@ -411,6 +430,7 @@ class Parser:  # all mutable state
         self.package = "_global"
         self.opackage = ""
         self.imports = []
+        self.from_imports = []
         self.transforms = []
 
         self.rootAst = Tree.Root()
@@ -420,6 +440,8 @@ class Parser:  # all mutable state
 
         self.filename = ""
         self.tokens = [None]
+
+        self.order = {}
 
         self.structs = {"_global": {}}
 
@@ -441,6 +463,7 @@ class Parser:  # all mutable state
                 "Stringable": Stringable,
                 "Atom": Atom,
                 "Lens": Lens,
+                "MaybeLens": MaybeLens,
                 "Any": All,
                 "Maybe": Maybe,
                 "Dict": topDict,

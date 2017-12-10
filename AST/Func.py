@@ -105,6 +105,7 @@ class FuncBody(Node):
         self.returnType = ""
         self.before = []
         self.method = False
+        self.tail = False
 
     def __str__(self):
         return "}"
@@ -130,11 +131,19 @@ class FuncBody(Node):
             codegen.append("while(1){")
             codegen.append("switch("+self._context+"){")
             codegen.append("case 0:")
+        elif self.tail:
+            self._continue = codegen.getName()
+            self.returnVar = codegen.getName()
+
+            codegen.append("var "+self._continue+"= true;")
+            codegen.append("var "+self.returnVar+";")
+            codegen.append("while (" + self._continue + ") {")
+            codegen.append(self._continue+"=false;")
 
         for i in self.nodes[:-1]:
             i.compileToJS(codegen)
-            if not type(i) in [Tree.FuncCall,Tree.If,Tree.Match,Tree.FuncBody,Tree.Create,Tree.Assign,Tree.CreateAssign,Tree.Tree.FuncBraceOpen,Tree.FuncStart] and i.type.name == "none":
-                codegen.append(";")
+            #if not type(i) in [Tree.FuncCall,Tree.If,Tree.Match,Tree.FuncBody,Tree.Create,Tree.Assign,Tree.CreateAssign,Tree.Tree.FuncBraceOpen,Tree.FuncStart] and i.type.name == "none":
+            #    codegen.append(";")
 
         did = False
 
@@ -142,13 +151,15 @@ class FuncBody(Node):
         if len(self.nodes) > 0 and self.do:
             y = yields(self.nodes[-1]) or (type(self.nodes[-1]) in [Tree.If, Tree.Match] and self.nodes[-1].yielding)
 
-        if self.returnType != Types.Null():
+        if not self.tail and self.returnType != Types.Null():
             if self.do:
                 if not y:
                     did = True
                     codegen.append(";return " + self._next + "(")
             else:
                 codegen.append(";return ")
+        elif self.tail:
+            codegen.append(self.returnVar+"=")
 
         if len(self.nodes) > 0:
             self.nodes[-1].compileToJS(codegen)
@@ -161,6 +172,10 @@ class FuncBody(Node):
                     codegen.append(";return "+self._next + "()")
             else:
                 codegen.append(")")
+        elif self.tail:
+            codegen.append("}")
+            if self.returnType != Types.Null():
+                codegen.append("return "+self.returnVar+";")
 
         codegen.append(";}")
 
@@ -201,6 +216,8 @@ class FuncBody(Node):
 
         if self.do:
             transform(self)
+        else:
+            tailRecursive(self)
 
         Scope.decrScope(parser)
 
@@ -218,6 +235,23 @@ def yields(i):
     elif type(i) in [Tree.If, Tree.Match] and i.yielding:
         return True
     return False
+
+def tailRecursive(body):
+    def loop(node):
+        for i in node.nodes[-1:]:
+            if not i.isEnd() and type(i) in [Tree.Match, Tree.If]:
+                for node in i.nodes:
+                    if type(node) is Tree.Block:
+                        loop(node)
+
+                loop(i)
+
+            if type(i) is FuncCall and not i.curry and not i.partial and i.nodes[0].name == body.name and body.name != "":
+                i.tail = True
+                body.tail = True
+                i.body = body
+
+    loop(body)
 
 def transform(body):
     outer_scope = [body]
@@ -267,7 +301,6 @@ def transform(body):
                         i.owner = outer_scope[-1]
 
                         o_iter += 1
-
 
             if type(i) in [Tree.If, Tree.Match] and i.yielding:
                 i.outer_scope = outer_scope[-1]
@@ -363,7 +396,9 @@ class FuncCall(Node):
                 codegen.append(";})()")
             return
 
-        if self.partial:
+        if self.tail and not self.nodes[0].type.do:
+            pass
+        elif self.partial:
             names = [codegen.getName() for i in self.nodes[1:]]
 
             partial = []
@@ -393,13 +428,26 @@ class FuncCall(Node):
             else:
                 codegen.append("(")
 
-        for iter in range(len(self.nodes[1:-1])):
-            iter += 1
-            i = self.nodes[iter]
-            if not type(i) is Under:
+        if self.tail and not self.nodes[0].type.do:
+            for iter in range(len(self.nodes)-1):
+                i = self.nodes[iter+1]
+
+                name = codegen.readName(self.body.package + "_" + self.body.names[iter])
+                print(name)
+                codegen.append(name+"=")
                 i.compileToJS(codegen)
-                if not (iter+2 == len(self.nodes) and type(self.nodes[iter+1]) is Under):
-                    codegen.append(",")
+                codegen.append(";")
+
+            codegen.append(self.body._continue+"=true;")
+            return
+        else:
+            for iter in range(len(self.nodes[1:-1])):
+                iter += 1
+                i = self.nodes[iter]
+                if not type(i) is Under:
+                    i.compileToJS(codegen)
+                    if not (iter+2 == len(self.nodes) and type(self.nodes[iter+1]) is Under):
+                        codegen.append(",")
 
         if len(self.nodes) > 1 and not type(self.nodes[-1]) is Under:
             self.nodes[-1].compileToJS(codegen)

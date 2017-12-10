@@ -44,7 +44,7 @@ import datetime
 def shouldParse(decl, name, parser):
     return not decl and not name in parser.compiled
 
-def importParser(parser, decl= False):
+def importParser(parser, decl= False, fromI=False):
     import os
     name = parser.nextToken()
 
@@ -55,6 +55,14 @@ def importParser(parser, decl= False):
 
     if not oname in parser.filenames and not oname in ignore:
         Error.parseError(parser, "package "+oname+" not found")
+
+    if decl == "order":
+        if not parser.package in parser.order:
+            parser.order[parser.package] = []
+
+        if not oname in parser.order[parser.package]:
+            parser.order[parser.package].append(os.path.basename(oname))
+        return
 
     name = os.path.basename(oname)
 
@@ -73,7 +81,6 @@ def importParser(parser, decl= False):
                 t = datetime.datetime.fromtimestamp(int(t))
             except FileNotFoundError:
                 sp = True
-                print("Error ", outputfile)
 
         if sp:
             p = Parser.Parser(parser.lexed[oname], parser.filenames[oname])
@@ -109,11 +116,19 @@ def importParser(parser, decl= False):
                 parser.currentNode.addNode(Tree.InitPack(name, parser))
 
     parser.imports.append(oname)
+    if fromI:
+        parser.from_imports.append(oname)
+
+import copy
 
 def fromParser(parser, decl= False, stage=False):
     place = Tree.PlaceHolder(parser)
 
-    importParser(parser, decl)
+    importParser(parser, decl, True)
+    if decl == "order":
+        parser.nextToken()
+        return
+
     name = parser.imports[-1]
 
     if parser.nextToken().token != "import":
@@ -130,25 +145,28 @@ def fromParser(parser, decl= False, stage=False):
             nameOfVar = token.token
         package = parser.package
 
-        if nameOfVar in parser.structs[name]:
-            if decl:
-                if stage and nameOfVar in parser.structs[package]:
-                    Error.parseError(parser, nameOfVar + " is already a struct")
-                parser.structs[package][nameOfVar] = parser.structs[name][nameOfVar]
-            else:
-                pass
-                #Scope.addVar(place, parser, nameOfVar, parser.scope[name][0][nameOfVar])
-
-            names.append((nameOfVar, "full"))
-        elif nameOfVar in parser.interfaces[name]:
+        if nameOfVar in parser.interfaces[name]:
             if not decl: return
 
             if stage and nameOfVar in parser.interfaces[package]:
                 Error.parseError(parser, nameOfVar + " is already an interface")
+
             parser.interfaces[package][nameOfVar] = parser.interfaces[name][nameOfVar]
+        elif nameOfVar in parser.structs[name]:
+            if decl:
+                if stage and nameOfVar in parser.structs[package]:
+                    Error.parseError(parser, nameOfVar + " is already a struct")
+                parser.structs[package][nameOfVar] = parser.structs[name][nameOfVar]
+                if not nameOfVar in parser.scope[parser.package][0]:
+                    Scope.addVar(place, parser, nameOfVar, Scope.Type(True, parser.structs[name][nameOfVar], "full"))
+                else:
+                    Scope.changeType(parser, nameOfVar, parser.structs[name][nameOfVar])
+                parser.scope[parser.package][0][nameOfVar].imported = True
+            names.append((nameOfVar, "full"))
         elif not decl and nameOfVar in parser.scope[name][0]:
              #can't set lambda
-            Scope.addVar(place, parser, nameOfVar, parser.scope[name][0][nameOfVar])
+            Scope.addVar(place, parser, nameOfVar, copy.copy(parser.scope[name][0][nameOfVar]))
+            parser.scope[parser.package][0][nameOfVar].imported = True
             names.append((nameOfVar, parser.scope[name][0][nameOfVar].target))
         elif not decl:
             Error.parseError(parser, "Package " + name + " does not have a variable, or type called " + nameOfVar)
@@ -158,13 +176,16 @@ def fromParser(parser, decl= False, stage=False):
     if token.token == "all":
         _names = set()
         for i in parser.structs[name]:
-            _names.add(i)
+            if parser.structs[name][i].package == name:
+                _names.add(i)
 
         for i in parser.interfaces[name]:
-            _names.add(i)
+            if parser.interfaces[name][i].name.split(".")[0] == name:
+                _names.add(i)
 
         for i in parser.scope[name][0]:
-            _names.add(i)
+            if not parser.scope[name][0][i].imported:
+                _names.add(i)
 
         for i in _names:
             getName(token, i)

@@ -9,7 +9,9 @@ import sys
 import logging
 import os
 import time
-import socketRepl
+from TopCompiler import socketRepl
+from TopCompiler import HindleyMilner
+socketRepl.topdev = globals()
 import threading
 
 mutex = threading.Lock()
@@ -50,7 +52,7 @@ def main():
                         print(e, file=sys.stderr)
 
                     removeTransforms(topc.global_parser)
-
+                    HindleyMilner.count = 0
                     error = e
                     time.sleep(0.2)
 
@@ -80,6 +82,7 @@ def main():
                     error = e
                     removeTransforms(topc.global_parser)
                 finally:
+                    HindleyMilner.count = 0
                     mutex.release()
     except (KeyboardInterrupt, SystemExit):
         pass

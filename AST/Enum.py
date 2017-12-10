@@ -59,15 +59,17 @@ class Match(Node):
         self.tmp = tmp
 
         if not self.yielding:
-            codegen.append("(function(){")
+            ownerIsBlock = type(self.owner) in [Tree.Block, Tree.FuncBody, Tree.Root] and not self.owner.nodes[-1] == self
+            if not ownerIsBlock:
+                codegen.append("(function(){")
             codegen.append("var " + tmp + "=")
             self.nodes[0].compileToJS(codegen)
             codegen.append(";")
 
             for iter in range(1, len(self.nodes)):
                 self.nodes[iter].compileToJS(codegen)
-
-            codegen.append("})()")
+            if not ownerIsBlock:
+                codegen.append("})()")
         else:
             codegen.count += 1
             self.ending = str(codegen.count)
@@ -188,6 +190,46 @@ class MatchCase(Node):
                         else:
                             name = codegen.readName(i.package + "_" + i.name)
                         codegen.append(name + "=" + tmp + "[" + str(index + 1) + "];")
+
+            elif type(node) is Tree.Operator and node.kind == "as":
+                i = node.nodes[0]
+
+                options = {
+                    Types.String: "string",
+                    Types.I32: "number",
+                    Types.Func: "function",
+                    Types.Bool: "boolean",
+                    Types.Null: "undefined",
+                    Types.Interface: "object",
+                    Types.FuncPointer: "function",
+                }
+
+                typ = node.type.toRealType()
+
+                if not type(typ) in [Types.Enum, Types.Struct, Types.Array, Types.Tuple, Types.T]:
+                    codegen.append("typeof "+tmp+"=='"+options[type(typ)]+"'")
+                elif type(typ) is Types.Array:
+                    codegen.append(tmp+" instanceof Vector")
+                elif type(typ) is Types.Tuple:
+                    codegen.append(tmp + " instanceof Array")
+                elif type(typ) is Types.T:
+                    codegen.append("true")
+                else:
+                    codegen.append(tmp+" instanceof "+typ.package+"_"+typ.normalName)
+
+                if not type(i) is Tree.ReadVar:
+                    codegen.append("&&")
+                    loop(i, tmp)
+
+                codegen.checking = False
+
+                if type(i) is Tree.ReadVar:
+                    if not self.yielding:
+                        name = codegen.createName(i.package + "_" + i.name)
+                        codegen.append("var ")
+                    else:
+                        name = codegen.readName(i.package + "_" + i.name)
+                    codegen.append(name + "=" + tmp +";")
             elif type(node) is Tree.Tuple:
                 if len(node.nodes) == 1:
                     loop(node.nodes[0], tmp)
@@ -201,6 +243,11 @@ class MatchCase(Node):
                                 codegen.check.append("&&")
                             loop(i, tmp + "[" + str(index) + "]")
                             iter += 1
+
+                    if iter == 0:
+                        codegen.append("1")
+
+
 
                     codegen.check.append(")")
                     codegen.checking = False
@@ -253,11 +300,10 @@ class MatchCase(Node):
             elif type(node) is Tree.Under:
                 codegen.append("1")
             elif type(node) is Tree.Operator and node.kind == "or":
-                codegen.append(tmp + "==")
-                node.nodes[0].compileToJS(codegen)
+                loop(node.nodes[0], tmp)
+                codegen.checking = True
                 codegen.append("||")
-                codegen.append(tmp + "==")
-                node.nodes[1].compileToJS(codegen)
+                loop(node.nodes[1], tmp)
                 codegen.checking = False
             else:
                 if node.type in [Types.I32,Types.Float,Types.String,Types.Bool]:

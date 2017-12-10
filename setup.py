@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='TopCompiler',
-      version='0.1',
+      version='0.2',
       description='Compiler for Top programming language',
       url='https://github.com/CodeClubLux/TopCompiler',
       author='CompilerLuke',
@@ -12,10 +12,15 @@ setup(name='TopCompiler',
       packages= ["TopCompiler","AST", "optimization"],
       install_requires=[
             "Flask",
-            "Flask-SocketIO"
+            "Flask-SocketIO",
             "requests",
             "jsbeautifier",
             "pypandoc"
       ],
-      include_package_data=True
+      include_package_data=True,
+      classifiers=[
+            'Development Status :: 3 - Alpha',
+      ],
+      keywords="top top-lang compiler transpiler",
+      python_requires='>=3',
 )

@@ -7,6 +7,16 @@ import requests
 
 import json
 
+import re
+from TopCompiler import Parser
+from TopCompiler import Scope
+from TopCompiler import Types
+from TopCompiler import Struct
+
+import pypandoc
+
+import AST as Tree
+
 server = "http://127.0.0.1:3000/"
 
 def installPackage():
@@ -36,12 +46,6 @@ def installPackage():
     else:
         print("Missing url", file=sys.stderr)
 
-import re
-from TopCompiler import Scope
-from TopCompiler import Types
-from TopCompiler import Struct
-
-import AST as Tree
 
 class PlaceHolder():
     def __init__(self, opackage, filename, token):
@@ -52,7 +56,7 @@ class PlaceHolder():
     def error(self, message):
         Error.errorAst(message, self.selfpackage, self.filename, self.token)
 
-import pypandoc
+real_str = str
 
 def doc(port):
     docs = []
@@ -104,6 +108,11 @@ def doc(port):
             return i
 
     def parse(package, filename, cont, token):
+        def str(typ):
+            if issubclass(type(typ), Types.Type):
+                return real_str(typ).replace(package+".", "").replace(name+".", "")
+            return real_str(typ)
+
         comment = token.token[4:-2]
         split = splitBy(comment)
         inCode = False
@@ -124,15 +133,16 @@ def doc(port):
                 if name in parser.structs[package]:
                     typ = parser.structs[package][name]
                     cont.append("type " + name + gen(typ.generic) + " =")
-                    for c in Struct.offsetsToList(parser.structs[package][name].offsets):
-                        cont.append("\n   " + c + ": " + typ.types[c].name + "")
+
+                    for c in Parser.offsetsToList(parser.structs[package][name].offsets):
+                        cont.append("\n   " + c + ": " + str(typ._types[c]) + "")
                 elif name in parser.interfaces[package]:
                     typ = parser.interfaces[package][name]
 
                     if type(typ) is Types.Interface:
                         cont.append("type " + name + " with\n")
                         for c in typ.types:
-                            cont.append("   " + c + ": " + typ.types[c].name + "\n")
+                            cont.append("   " + c + ": " + str(typ.types[c]) + "\n")
                     elif type(typ) is Types.Enum:
                         cont.append("type " + name + " either\n")
                         for c in typ.types:
@@ -140,7 +150,7 @@ def doc(port):
                             if len(args) == 0:
                                 cont.append("   " + c + "\n")
                             else:
-                                cont.append("   " + c + "(" + ", ".join([d.name for d in args]) + ")\n")
+                                cont.append("   " + c + "(" + ", ".join([str(d) for d in args]) + ")\n")
                 else:
                     try:
 
@@ -166,22 +176,26 @@ def doc(port):
         count = -1
         for file in lexed[package]:
             count += 1
-            filename = parser.filenames[package][count][1]
+            filename = parser.filenames[package][count][0] + "/" + parser.filenames[package][count][1]
+
             for token in file:
                 if token.type in ["comment", "commentLine"] and token.token[2] == "*":
                     parse(package, filename, content, token)
 
-        f = open("src/"+package+"/README.md", "w")
+        #f = open("src/"+package+"/README.md", "w")
         s = "".join(content)
-        f.write(s)
-        f.close()
+
+        #f.write(s)
+        #f.close()
 
         #print( open("src/"+package+"/README.md", "r").read())
 
-        html = pypandoc.convert_file("src/"+package+"/README.md", "html5", "markdown_github")
+        html = pypandoc.convert_text(s, "html5", "markdown_github")
+        #html = pypandoc.convert_file("src/"+package+"/README.md", "html5", "markdown_github")
 
         docs.append([package, html])
     return docs
+
 import shutil
 
 def uninstallPackage():
@@ -193,6 +207,104 @@ def uninstallPackage():
             print("No package " + name + " installed", file=sys.stderr)
     else:
         print("Expecting name of package to be uninstalled", file=sys.stderr)
+
+class Diff:
+    def __init__(self):
+        self.type = "patch"
+        self.diffs = {}
+
+    def setType(self, newVersion):
+        importance = {
+            "major": 3,
+            "minor": 2,
+            "patch": 1,
+            "": 0,
+        }
+
+        if importance[newVersion] > importance[self.type]:
+            self.type = newVersion
+
+class Version:
+    def __init__(self, major, minor, patch):
+        self.major = self.major
+        self.minor = self.minor
+        self.patch = self.patch
+
+def parseVersion(s):
+    return Version(*s.split("."))
+
+def diffDict(diff, package, old, new, equal):
+    def str(typ):
+        if issubclass(type(typ), Types.Type):
+            return real_str(typ).replace(package + ".", "").replace(package + ".", "")
+        return real_str(typ)
+
+    for item in old:
+        if item in new:
+            if not equal(old[item], new[item]):
+                diff.diffs[package].append("- " + item + " : " + str(old[item]))
+                diff.diffs[package].append("+ " + item + " : " + str(new[item]))
+                diff.setType("major")
+        else:
+            diff.setType("major")
+
+    for item in new:
+        if not item in old:
+            diff.diffs[package].append("+ " + item + " : " + str(new[item]))
+            diff.setType("minor")
+
+def diff(old, new):
+    diffs = Diff()
+
+    for package in old.scope:
+        if package in ["_global", "main"]:
+            continue
+
+        if package in new.scope:
+            diffs.diffs[package] = []
+            diffDict(diffs, package, old.scope[package][0], new.scope[package][0], lambda o, n: o.type.name == n.type.name)
+        else:
+            diffs.diffs[package] = ["- " + package + "\n"]
+            diffs.setType("major")
+
+    for package in new.scope:
+        if not package in old.scope:
+            diffs.diffs[package] = ["+ "+package+"\n"]
+            diffs.version.setType("major")
+
+    return diffs
+
+import pickle
+import codecs
+from TopCompiler import saveParser
+
+def getVersion(project, version):
+    #response = requests.post(server + "query", '[3, "' + project + '","' + version + "\"]")
+    response = requests.get("https://raw.githubusercontent.com/CodeClubLux/core/master/lib/parser.p")
+    pickled = response.content
+
+    return pickle.loads(pickled)
+
+def diffVersions(port):
+    if len(sys.argv) > 2:
+        oldVersion = sys.argv[2]
+
+        other = getVersion(oldVersion)
+    else:
+        other = getVersion(port["name"], "latest")
+
+    _diff = diff(saveParser.load(), other)
+
+    for package in _diff.diffs:
+        i = _diff.diffs[package]
+
+        if len(i) > 0:
+            print("\n" + package + "\n")
+            print(("\n").join(i))
+
+    print("\nThis is a "+_diff.type+" change.")
+
+        #print("Need a version number too compare too")
 
 def deploy(port):
     for i in ["description", "git", "name"]:
@@ -257,6 +369,8 @@ def main():
             deploy(port)
         elif sys.argv[1] == "doc":
             doc(port)
+        elif sys.argv[1] == "diff":
+            diffVersions(port)
         else:
             print("Unknown command "+sys.argv[1], file=sys.stderr)
     else:

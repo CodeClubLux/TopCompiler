@@ -21,6 +21,9 @@ String.prototype.op_eq = function(s) { return this == s }
 function float_toFloat(s) { return s }
 function int_toFloat(s) { return s }
 
+function raise(str) {
+    throw new Exception(str);
+}
 function isOdd(number) {
     return number % 2 != 0
 }
@@ -208,13 +211,24 @@ function newAtom(arg) {
     }
 }
 
-function newLens(reader, setter, string) {
+function newLens(reader, setter, string, maybe) {
     return {
         query: function(item) {
+            if (maybe) {
+                try {
+                    return Some(reader(item));
+                } catch (Exception) {
+                    return None;
+                }
+            }
             return reader(item);
         },
         set: function(old, item) {
-            return setter(old, item)
+            try {
+                return setter(old, item);
+            } catch (Exception) {
+                return old;
+            }
         },
         toString: function() {
             return string;
@@ -241,10 +255,10 @@ function Some(x) {
     return s
 }
 
-var None = new Some(1);
+var None = new Maybe(1);
 
 function Maybe_withDefault(self,def){
-    if (def[0] == 0) {
+    if (self[0] === 0) {
         return self[1];
     } else {
         return def;
@@ -253,8 +267,8 @@ function Maybe_withDefault(self,def){
 
 
 function Maybe_map(self,func){
-    if (def[0] == 0) {
-        return Some(func(def[1]));
+    if (self[0] == 0) {
+        return Some(func(self[1]));
     } else {
         return None;
     }
@@ -265,7 +279,7 @@ Maybe.prototype.withDefault = function(def){
 }
 
 Maybe.prototype.map = function(func){
-    return Maybe_map(this,def);
+    return Maybe_map(this,func);
 }
 
 function sleep(time, callback) {
@@ -359,19 +373,25 @@ function core_json_interface(array) {
     }
 }
 
-function core_json_enum(array) {
-    return function (realObj) {
+function core_json_enum(typ, array) {
+    return function(realObj) {
         var iter = realObj[0]
-        var _enum = [iter];
-        for (var i = 1; i < realObj.length; i++) {
-            _enum[i] = array[iter][i-1](realObj[i]);
+        var _enum = new typ(iter);
+        for (var i = 1; i < array[iter].length; i++) {
+            _enum[i] = array[iter][i - 1](realObj[i]);
         }
         return _enum;
     }
 }
 
+//root, len, depth, start
+
 function core_json_vector(decoder) {
     return function (realObj) {
+        if (realObj.root) {
+            var vector = new Vector(realObj.root, realObj.length, realObj.depth, realObj.start);
+            return vector;
+        }
         return fromArray(realObj.map(decoder));
     }
 }

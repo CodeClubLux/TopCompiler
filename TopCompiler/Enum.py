@@ -91,17 +91,22 @@ def checkCase(parser, case, typ, first=False):
             case.error("cannot pattern match on type " + str(typ) + ", as if it were a ADT")
 
         if not case.name in typ.const:
-            case.error("ADT " + str(typ) + ", does not have case " + case.nodes[0].name)
+            case.error("ADT " + str(typ) + ", does not have case " + case.name)
 
         case.type = typ
     elif type(case) is Tree.Operator and case.kind == "concat" and not case.curry and not case.partial:
         if not typ.isType(Types.String):
             case.nodes[0].error("unexpected string")
+
+        """
         if type(case.nodes[1]) is Tree.Tuple:
+            print("adding name "+case.nodes[1].nodes[0].name)
             Scope.addVar(case.nodes[1].nodes[0], parser, case.nodes[1].nodes[0].name, Scope.Type(True, typ))
         else:
-            checkCase(parser, case.nodes[0], typ)
-            checkCase(parser, case.nodes[1], typ)
+        """
+
+        checkCase(parser, case.nodes[0], typ)
+        checkCase(parser, case.nodes[1], typ)
 
         case.type = typ
         case.nodes[0].type = typ
@@ -124,19 +129,29 @@ def checkCase(parser, case, typ, first=False):
             node = case.nodes[iter]
             checkCase(parser, node, typ.elemT)
     elif type(case) is Tree.Operator and case.kind == "or" and not case.curry and not case.partial:
-        typT = case.nodes[0].type
-        if typT != case.nodes[1].type:
-            case.nodes[1].error("expecting type to be "+str(typ)+" and not "+str(case.nodes[1]))
+        #typT = case.nodes[0].type
+        for node in case.nodes:
+            checkCase(parser, node, typ)
 
-        if typT != typ:
-            case.error("expecting result of or, to be of type "+str(typ)+" not "+str(typT))
+        #if not typT.isType(case.nodes[1].type):
+        #    case.nodes[1].error("expecting type to be "+str(typ)+" and not "+str(case.nodes[1].type))
+
+        #if not typT.isType(typ):
+        #    case.error("expecting result of or, to be of type "+str(typ)+" not "+str(typT))
         case.type = Types.Bool()
         case.opT = Types.Bool()
     elif type(case) in [Tree.String, Tree.Int, Tree.Float]:
-        if case.type != typ:
+        if not typ.isType(case.type):
             case.error("expecting type "+str(case.type)+", not "+str(typ))
     elif type(case) is Tree.Operator and case.kind == ".." and not case.curry and not case.partial:
         checkCase(parser, case.nodes[0], Types.Array(False, typ))
+    elif type(case) is Tree.Operator and case.kind == "as" and not case.curry and not case.partial:
+        castTyp = case.type
+        if not typ.isType(Types.Union):
+            case.error("Type "+str(typ) + ", cannot be pattern matched on as if it were a union.")
+        if not str(castTyp) in [str(i) for i in typ.different_types]:
+            case.error("Type "+str(castTyp)+", not in "+str(typ))
+        checkCase(parser, case.nodes[0], castTyp)
     elif not type(case) is Tree.Under:
         case.error("unknown pattern")
 
@@ -162,9 +177,12 @@ def missingPattern(typ, match):
                 m.error("Duplicate pattern")
 
             const.append(name)
+        elif type(m) is Tree.Operator and m.kind == "as":
+            const.append(m.type)
 
-    if not typ.isType(Types.Enum) and not under:
+    if not typ.isType(Types.Enum) and not typ.isType(Types.Union) and not under:
         match.error("missing _ case to match all possibilities")
+
     elif len(const) < len(typ.const):
         match.error("missing pattern "+", ".join([i for i in typ.const if not i in const]))
 

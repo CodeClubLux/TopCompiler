@@ -13,6 +13,7 @@ from TopCompiler import PackageParser
 from TopCompiler import ImportParser
 from TopCompiler import MethodParser
 import os
+import copy
 
 def funcHead(parser):
     (name, names, types, header, returnType, do) = FuncParser.funcHead(parser, True)
@@ -34,10 +35,34 @@ def resolve(self):
             self.allImports[c] = []
 
         for i in range(len(tokens[c])):
-            _resolve(self, tokens[c][i], self._filename[i][1], passN=0)
+            _resolve([], self, tokens[c][i], self._filename[i][1], passN=0)
+
+    order = []
+
+    def findOrder(package, index=-1):
+        if not package in order:
+            order.insert(-1, package)
+
+            if package in self.order:
+                for i in self.order[package]:
+                    findOrder(i, index - 1)
+            else:
+                for i in self.allImports[package]:
+                    findOrder(i, index - 1)
+
+    findOrder("main")
+
+    usedModules = copy.copy(order)
+
+    for package in filenames:
+        if not package in order and package != "main":
+            findOrder(package)
+
+    self.order_of_modules = order
+    self.orderOfUsedModules = usedModules
 
     for n in range(1,3):
-        for c in filenames:
+        for c in order:
             self._filename = self.filenames[c]
             if len(filenames[c]) == 0:
                 continue
@@ -46,7 +71,7 @@ def resolve(self):
             self.opackage = c
 
             for i in range(len(tokens[c])):
-                _resolve(self, tokens[c][i], self._filename[i][1], passN=n)
+                _resolve(usedModules, self, tokens[c][i], self._filename[i][1], passN=n)
 
     self.rootAst = Tree.Root()
     self.currentNode = self.rootAst
@@ -58,12 +83,16 @@ def resolve(self):
 
 from TopCompiler import ImportParser
 
-def _resolve(self, tokens, filename, passN= 0 ):
+def _resolve(usedModules, self, tokens, filename, passN= 0 ):
     target = self.global_target
     if self.package != "main":
         self.global_target = "full"
 
     if self.hotswap and not ImportParser.shouldCompile(False, self.package, self):
+        if passN != 0 and "main" in self.allImports:
+            for package in self.allImports[self.package]:
+                if not usedModules:
+                    self.compiled[package] = (False,)
         return
 
     self.filename = filename
@@ -104,6 +133,10 @@ def _resolve(self, tokens, filename, passN= 0 ):
                 self.structs[self.package][self.thisToken().token] = Struct.Struct(self.thisToken().token, [],[], {}, self, self.package)
                 self.structs[self.package][self.thisToken().token].methods = {}
                 #"""
+            elif b == "import":
+                ImportParser.importParser(self, "order")
+            elif b == "from":
+                ImportParser.fromParser(self, "order")
 
         if b == "\n":
             Parser.addBookmark(self)
@@ -117,6 +150,7 @@ def _resolve(self, tokens, filename, passN= 0 ):
             self.allImports[self.package].append(i)
 
     self.imports = []
+    self.from_imports = []
 
     self.lineNumber = 1
     self.normalIndent = 0
@@ -164,6 +198,9 @@ def insert(parser, p, only= False, copy= False):
     p.output_target = parser.output_target
     p.cssFiles = parser.cssFiles
     p.usedModules = parser.usedModules
+    p.run = parser.run
+    p.order_of_modules = parser.order_of_modules
+    p.orderOfUsedModules = parser.orderOfUsedModules
 
     return p
 

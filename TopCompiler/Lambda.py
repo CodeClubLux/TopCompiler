@@ -21,6 +21,10 @@ def func(parser):
     while parser.thisToken().token != "|":
         if b.type == "identifier" and parser.lookInfront().token != ":":
             count += 1
+
+            def callback(typ):
+                print(u.varName, "changed to", typ)
+
             u = Types.Unknown(parser)
             u.varName = parser.thisToken().token
             VarParser.createParser(parser, b, typ= u, check= False)

@@ -31,3 +31,6 @@ Number.prototype.toInt = function () { return this | 0 }
 String.prototype.op_eq = function (other) { return this == other }
 String.prototype.op_ne = function (other) { return this != other }
 String.prototype.op_add = function (other) { return this + other }
+String.prototype.op_lt = function (other) { return this < other }
+String.prototype.op_gt = function (other) { return this > other }
+String.prototype.get = function(index) { return this[index]; }
