@@ -63,7 +63,7 @@ def generics(parser, fname):
     return generic
 
 def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = False):
-
+    target = "full"
     if parser.tokens[parser.iter+2].token == ".":
         if attachTyp: Error.parseError(parser, "unexpected .")
         parser.nextToken()
@@ -86,6 +86,12 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
         Scope.incrScope(parser)
 
     name = parser.nextToken()
+
+    if name.token in ["client", "full", "node"]:
+        target = name.token
+        if target == "full":
+            target = "mustFull"
+        name = parser.nextToken()
 
     if name.type != "identifier":
         Error.parseError(parser, "function name must be of type identifier, not "+name.type)
@@ -117,7 +123,6 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
 
                 return funcHead(parser, decl, dontAdd, True, attachTyp)
 
-
         if parser.thisToken().token != "(":
             Error.parseError(parser, "expecting (")
 
@@ -127,10 +132,12 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
     header = Tree.FuncStart(name, Types.Null(), parser)
     header.package = parser.package
     parser.currentNode.addNode(header)
+    header.global_target = target
 
     brace = Tree.FuncBraceOpen(parser)
     brace.name = name
     brace.package = parser.package
+    brace.global_target = target
 
     parser.currentNode.addNode(brace)
 
@@ -192,11 +199,18 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
     names = [i.name for i in brace.nodes]
     types = [i.varType for i in brace.nodes]
 
+    ignore = {}
+
+    for (count, i) in enumerate(brace.nodes):
+        if i.ignoreTarget:
+            ignore[count] = i.ignoreTarget
+
     func = Types.FuncPointer(
         types,
         returnType,
         g,
-        do
+        do,
+        ignore= ignore
     )
 
     header.do = do
@@ -220,7 +234,7 @@ def funcHead(parser, decl= False, dontAdd= False, method= False, attachTyp = Fal
     header.ftype = func
     if decl:
         if not dontAdd:
-            Scope.addFunc(header, parser, name, func)
+            Scope.addFunc(header, parser, name, func, target)
 
     return name, names, types, brace, returnType, do
 
@@ -231,6 +245,9 @@ def funcBody(parser, name, names, types, brace, returnType, do):
     body.package = parser.package
     body.do = do
     body.names = names
+
+    target = brace.global_target
+    body.global_target = target
 
     brace.body = body
 

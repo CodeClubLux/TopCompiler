@@ -17,16 +17,28 @@ checkTyp = []
 len = lambda i: i.__len__()
 
 def infer(parser, tree):
+    origTree = tree
     varTypes = {}
     sc = parser.sc
 
     parser.func = []
 
-    def loop(n, o_iter):
+    def loop(n, o_iter, tree= tree):
         count = 0
         for i in n:
-            if type(n) is type(tree):
+            if n is origTree:
                 o_iter += 1
+
+            treeBefore = tree
+            o_iterBefore = o_iter
+
+            if type(n) is Tree.FuncCall and count > 0:
+                typ = n.nodes[0].type
+                if type(typ) is Types.FuncPointer and (count - 1) in typ.ignore and typ.ignore[count - 1]:
+                    ignoreTarget = typ.ignore[count - 1]
+                    n.global_target = ignoreTarget.replace("ignoreTargetOn", "")
+                    tree = n
+                    o_iter = count
 
             if not sc and type(i) in [Tree.FuncStart, Tree.FuncBraceOpen, Tree.FuncBody]:
                 count += 1
@@ -50,8 +62,12 @@ def infer(parser, tree):
                         parser.func.append(parser.package+"."+i.name[:i.name.find("_")])
 
                     parser.func.append(parser.package+"."+i.name.replace("_", "."))
-
-                loop(i, o_iter)
+                    if i.name != "":
+                        loop(i, count, tree= i.owner)
+                    else:
+                        loop(i, o_iter, tree=tree)
+                else:
+                    loop(i, o_iter, tree=tree)
 
                 if type(i) is Tree.FuncBody and len(parser.func) > 0:
                     if i.method:
@@ -211,7 +227,6 @@ def infer(parser, tree):
                         i.nodes[0].isGlobal = Scope.isGlobal(parser, i.nodes[0].package, i.nodes[0].name)
 
                 if i.global_target != parser.global_target:
-                    #print(i.nodes[0].name)
                     Scope.changeTarget(parser, i.nodes[0].name, i.global_target)
                     #print("this variable can only be used in a specific target", i.global_target)
             elif type(i) is Tree.FuncBody:
@@ -230,7 +245,6 @@ def infer(parser, tree):
                             check(c, _i)
                 check(i, i)
                 if i.global_target != parser.global_target:
-                    #print(i.name)
                     Scope.changeTarget(parser, i.name, i.global_target)
                     #print("this function can only be used in a specific target", i.global_target)
 
@@ -267,7 +281,13 @@ def infer(parser, tree):
                     target = Scope.targetOfVar(i, parser, parser.package, self.name)
                     realT = tree.nodes[o_iter].global_target
 
+                    if target == "mustFull":
+                        target = "full"
+
                     if target != parser.global_target and (parser.global_target == "full"):
+                        if i.name == "scroll":
+                            print(parser.func)
+
                         root = tree.nodes[o_iter]
 
                         if type(root) is Tree.FuncBody:
@@ -277,9 +297,14 @@ def infer(parser, tree):
                             except IndexError:
                                 pass
 
+                        if realT != "full" and realT != target:
+                            if realT == "mustFull": realT = "full"
+                            i.error("variable "+i.name+" is of target "+target+ ", but being used in a context requiring "+realT+" target")
+
                         root.global_target = target
 
                     elif realT != target and target != "full" and realT != "full":
+                        if realT == "mustFull": realT = "full"
                         i.error("variable "+i.name+" is of target "+target + ", but being used in a "+realT+" target")
 
             elif type(i) is Tree.Field:
@@ -595,14 +620,14 @@ def infer(parser, tree):
                     parser.atomTyp = i.owner.nodes[1].type
                     parser.atoms += 1
 
-
-
                 i = c
 
                 if args.__len__() > len(i.nodes)-1:
                     i.curry = True
+                    previosIgnore = i.nodes[0].type.ignore
+                    ignore = {(i - len(c.nodes) + 1): previosIgnore[i] for i in previosIgnore}
 
-                    i.type = Types.replaceT(Types.FuncPointer(args[len(i.nodes)-1:], i.nodes[0].type.returnType, generic=i.nodes[0].type.generic, do = i.nodes[0].type.do), generics)
+                    i.type = Types.replaceT(Types.FuncPointer(args[len(i.nodes)-1:], i.nodes[0].type.returnType, generic=i.nodes[0].type.generic, do = i.nodes[0].type.do, ignore= ignore), generics)
 
                     #i.type = Types.FuncPointer([Types.replaceT(c, generics) for c in args[len(i.nodes)-1:]], Types.replaceT(i.nodes[0].type.returnType, generics),generic= newGenerics, do= do)
 
@@ -610,7 +635,7 @@ def infer(parser, tree):
                     i.type = Types.replaceT(i.nodes[0].type.returnType, generics)
                 else:
                     i.partial = True
-                    i.type = Types.replaceT(Types.FuncPointer(newArgs, i.nodes[0].type.returnType, do= do), generics)
+                    i.type = Types.replaceT(Types.FuncPointer(newArgs, i.nodes[0].type.returnType, do= do, ignore=i.nodes[0].type.ignore), generics)
 
             elif type(i) is Tree.If:
                 ElseExpr.checkIf(parser, i)
@@ -678,17 +703,17 @@ def infer(parser, tree):
                                     ctype = c.type
                                 try:
                                     typ.duckType(parser, ctype, i, c, count)
-                                except EOFError as e:
+                                except EOFError as prevE:
                                     try:
                                         ctype.duckType(parser, typ, c, i, count)
                                         typ = ctype
                                     except EOFError as e:
-                                        try:
+                                        """try:
                                             u = Types.Union([ctype, typ])
                                             Types.checkUnion(parser, u)
-                                            typ = ctype
-                                        except EOFError as e:
-                                            err = e
+                                            typ = u"""
+
+                                        err = prevE
 
                                 if err:
                                     Error.beforeError(err, "Element type in array: ")
@@ -844,6 +869,7 @@ def infer(parser, tree):
                         g.duckType(parser, i.generic[index], i.nodes[0], i, 0)
                     else:
                         del replace[c]
+
                 i.type = Types.replaceT(i.nodes[0].type, replace)
 
                 #i.nodes[0].type.duckType(parser, i.type, i, i.nodes[0])
@@ -858,6 +884,8 @@ def infer(parser, tree):
             if type(i) in [Tree.Block, Tree.While]:
                 Scope.decrScope(parser)
 
+            tree = treeBefore
+            o_iter = o_iterBefore
             count += 1
 
     loop(tree, -1)

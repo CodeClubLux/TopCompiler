@@ -61,6 +61,8 @@ keywords = [
         "decoder",
         "extension",
         "is",
+        "ignoreOnClient",
+        "ignoreOnNode"
     ]
 
 token_specification = [

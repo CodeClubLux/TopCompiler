@@ -73,18 +73,17 @@ class Type(Node):
             for i in range(len(self.fields)):
                 codegen.append("this."+self.fields[i]+"="+names[i]+";")
             codegen.append("}")
-            codegen.append(self.package+"_"+self.normalName+"._fields=[")
+            #codegen.append(self.package+"_"+self.normalName+"._fields=[")
 
-            codegen.append(",".join('[ "'+i+'" , "' + str(self.types[i]) + '" ]' for i in self.fields))
-            codegen.append("];")
+            #codegen.append(",".join('[ "'+i+'" , "' + str(self.types[i]) + '" ]' for i in self.fields))
+            #codegen.append("];")
 
-            codegen.append("types['" + self.package + "'" + "]['" + self.name + "']="+self.package+"_"+self.name+"._fields;")
+            #codegen.append("types['" + self.package + "'" + "]['" + self.name + "']="+self.package+"_"+self.name+"._fields;")
             codegen.outFunction()
-
         else:
-            codegen.append("types['" + self.package + "'" + "]['" + self.name + "']=")
-            codegen.append(",".join('[ "' + i + '" , "' + str(self.types[i]) + '" ]' for i in self.fields))
-            codegen.append("];")
+            #codegen.append("types['" + self.package + "'" + "]['" + self.name + "']=")
+            #codegen.append(",".join('[ "' + i + '" , "' + str(self.types[i]) + '" ]' for i in self.fields))
+            #codegen.append("];")
             codegen.outFunction()
 
     def validate(self, parser): pass

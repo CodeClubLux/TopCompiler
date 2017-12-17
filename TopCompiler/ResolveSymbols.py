@@ -26,6 +26,7 @@ def resolve(self):
     for c in filenames:
         self._filename = self.filenames[c]
         PackageParser.packDec(self, c, pack=True)
+
         if self.hotswap and ImportParser.shouldCompile(False, self.package, self):
             self.scope[self.package] = [{}]
             self.structs[self.package] = {}

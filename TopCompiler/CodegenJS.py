@@ -124,10 +124,15 @@ class CodeGen:
         self.names.pop()
 
     def toJS(self, _target):
+        if self.filename == "main":
+            _next = ""
+        else:
+            _next = self.getName()
+
         def _compile(out, main, target):
-            return "function " + str(self.filename) + "_" + target + "Init(){var " + self.tree._context + "=0;" + \
+            return "function " + str(self.filename) + "_" + target + "Init("+_next+"){var " + self.tree._context + "=0;" + \
                    "return function " + self.tree._name + "(" + self.tree.res + "){" + \
-                   "while(1){switch (" + self.tree._context + "){case 0:" + main + ";return;}}}()}" + \
+                   "while(1){switch (" + self.tree._context + "){case 0:" + main + "; return "+(_next+"();" if _next != "" else ";") + "}}}()}" + \
                    out
 
         if _target == "full":
@@ -172,6 +177,9 @@ class CodeGen:
         return result
 
     def append(self, value):
+        if self.target == "mustFull":
+            self.target = "full"
+
         if value is None:
             raise Error.error("expecting type string and got none, internal error")
 
@@ -217,6 +225,7 @@ class CodeGen:
 
     def compile(self, opt=0):
         target = self.global_target
+        if target == "mustFull": target = "full"
 
         if target == "full":
             (node, client) = self.toJS(target)
@@ -264,6 +273,13 @@ def getRuntimeNode():
 
 def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target, hotswap):
     needSocket = False
+
+    if target == "client":
+        f = open("bin/assets.json", "w")
+        f.write("""{
+            "css": [ """+",".join(('"'+i+'"' for i in linkWithCSS))+""" ],
+            "js": [ \"bin/""" + output + '-client.js' + '"' + """ ]
+        }""")
 
     if target == "client" and debug:
         terminal = open(__file__[0:__file__.rfind("/") + 1] + "terminal/bundle.html").read()
@@ -391,14 +407,13 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
 
     linked += "\n"
 
-    linked += ("var types = {};\n")
+    #linked += ("var types = {};\n")
 
     for i in filenames:
         f = open("lib/" + i.replace("/", ".") + "-" + target + ".js", mode="r")
-        linked += "\ntypes['" + i + "'] = {};\n"
+        #linked += "\ntypes['" + i + "'] = {};\n"
         linked += f.read()
         f.close()
-
 
     fjs = open("bin/" + output + "-" + target + ".js", mode="w")
 
@@ -407,8 +422,8 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
     if opt == 3:
         linked += "})()"
 
-    #import jsbeautifier
-    #linked = jsbeautifier.beautify(linked)
+    import jsbeautifier
+    linked = jsbeautifier.beautify(linked)
 
     fjs.write(linked)
     fjs.close()

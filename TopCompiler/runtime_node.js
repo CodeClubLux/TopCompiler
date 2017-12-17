@@ -413,7 +413,7 @@ function core_json_enum(typ, array) {
     return function(realObj) {
         var iter = realObj[0]
         var _enum = new typ(iter);
-        for (var i = 1; i < array[iter].length; i++) {
+        for (var i = 1; i < array[iter].length+1; i++) {
             _enum[i] = array[iter][i - 1](realObj[i]);
         }
         return _enum;

@@ -110,17 +110,22 @@ def getCompilationFiles(target):
         nodeLinkWithFiles = []
 
         for root, dirs, files in os.walk(dir, topdown=False, followlinks=True):
-
+            if root.endswith("node_modules") or "/node_modules/" in root:
+                continue
 
             for i in files:
                 if root == start and i != "port.json" and i.endswith(".top"):
                     _package = i[:-4]
                     file[_package] = [(root, i)]
-                    #file[package].append((root, f + ".top"))
+                elif i.endswith(".top") and not "port.json" in files:
+                    packageName = i[:i.rfind(".")] #root[root.find("src/")+4:]+"/"+i[:i.rfind(".")]
+                    file[packageName] = [(root, i)]
+
+
+            if not "port.json" in files:
+                continue
 
             files = []
-            if root.endswith("node_modules") or "/node_modules/" in root:
-                continue
 
             package = root
             if package == start: continue
@@ -442,16 +447,15 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                 canStartWith = ['']
 
                 for i in parser.compiled:
-                    tmp = os.path.dirname(parser.filenames[i][0][0])
-
-                    dir = tmp[tmp.find("packages")+len("packages")+1:tmp.rfind("src")-1]
-                    canStartWith.append(dir)
-
                     if parser.compiled[i][0]:
                         CodeGen.CodeGen(i, parser.compiled[i][1][0], parser.compiled[i][1][1], target, opt).compile(opt=opt)
 
 
                 for i in parser.orderOfUsedModules:
+                    tmp = os.path.dirname(parser.filenames[i][0][0])
+
+                    dir = tmp[tmp.find("packages")+len("packages")+1:tmp.rfind("src")-1]
+                    canStartWith.append(dir)
                     parser.usedModules[i] = datetime.datetime.now()
 
                 _linkCSSWithFiles = [i for (d, i) in linkCSSWithFiles if d in canStartWith]

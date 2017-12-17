@@ -133,7 +133,7 @@ def declareOnly(self, noVar=False):
     s1 = selectStmt(self, self.thisToken())
     s2 = selectStmt(self, self.lookInfront())
 
-    declaration = ["var", ":", "(", ")", ",", "\n"]
+    declaration = ["var", ":", "(", ")", ",", "\n", "ignoreOnClient", "ignoreOnServer"]
     if noVar:
         declaration = declaration[1:]
 

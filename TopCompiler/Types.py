@@ -360,18 +360,20 @@ class String(Type):
             "op_lt": FuncPointer([self], Bool()),
             "split": FuncPointer([self], Array(False, self)),
             "get": FuncPointer([Types.I32()], self),
+            "endsWith": FuncPointer([self], Bool())
         }
 
 class FuncPointer(Type):
-    def __init__(self, argtypes, returnType, generic= coll.OrderedDict(), do= False):
+    def __init__(self, argtypes, returnType, generic= coll.OrderedDict(), do= False, ignore=[]):
         self.args = argtypes
-        self.name = "|"+", ".join([i.name for i in argtypes])+"| " +  ("do " if do else "-> ") +returnType.name
+        self.name = "|"+", ".join([(ignore[count]+" " if count in ignore else "") + i.name for (count, i) in enumerate(argtypes)])+"| " +  ("do " if do else "-> ") +returnType.name
 
         self.returnType = returnType
         self.generic = generic
         self.types = {}
         self.do = do
         self.isLambda = False
+        self.ignore = ignore
 
     def check(self):
         pass
@@ -442,6 +444,9 @@ class Union(Type):
 
     def duckType(self, parser, other, node, mynode, iter):
         if other.isType(Union):
+            for typ in other.different_types:
+                if not typ in self.different_types:
+                    node.error("Type " + str(other) + ", contains unsupported type "+str(typ))
             for typ in self.different_types:
                 if typ in other.different_types:
                     return
@@ -626,6 +631,7 @@ class Array(Type):
                 "shorten": FuncPointer([Types.I32()], self),
                 "slice": FuncPointer([Types.I32(), Types.I32()], self)
             }
+
         return self.__types
     def duckType(self, parser, other, node, mynode, iter):
         
@@ -1169,7 +1175,7 @@ def replaceT(typ, gen, acc=False, unknown=False): #with bool replaces all
             arr.append(replaceT(i, gen, acc, unknown))
 
         newTyp = replaceT(typ.returnType, gen, acc, unknown)
-        r = FuncPointer(arr, newTyp, remainingT(newTyp), do= typ.do)
+        r = FuncPointer(arr, newTyp, remainingT(newTyp), do= typ.do, ignore= typ.ignore)
         return r
     else:
         return typ

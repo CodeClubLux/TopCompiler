@@ -17,6 +17,7 @@ class Create(Node):
         self.extern = False
         self.escapes = False
         self.attachTyp = False
+        self.ignoreTarget = False
 
     def __str__(self):
         return self.name + ": "+str(self.varType)

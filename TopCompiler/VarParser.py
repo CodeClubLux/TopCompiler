@@ -42,7 +42,7 @@ def pattern(name, names, parser, getName):
         else:
             name.error("Unexpected token")
 
-def createParser(parser, name= "", typ= None, check= True, imutable= True, attachTyp= False): # : creation
+def createParser(parser, name= "", typ= None, check= True, imutable= True, attachTyp= False, ignoreTarget=False): # : creation
     if name == "":
         name = parser.lookBehind()
 
@@ -65,6 +65,7 @@ def createParser(parser, name= "", typ= None, check= True, imutable= True, attac
     node.package = parser.package
     node.imutable = imutable
     node.names = names
+    node.ignoreTarget = ignoreTarget
 
     if attachTyp:
         node.attachTyp = attachTyp
@@ -204,6 +205,18 @@ Parser.stmts["var"] = lambda parser: createAndAssignParser(parser, imutable= Fal
 Parser.stmts["="] = assignParser
 Parser.stmts[":"] = createParser
 
+def ignoreTarget(parser):
+    targetIgnored = parser.thisToken().token
+    name = parser.nextToken()
+    if name.type != "identifier":
+        Error.parseError(parser, "Expecting identifier")
+    colon = parser.nextToken()
+    if colon.token != ":":
+        Error.parseError(parser, "Expecting :")
+    createParser(parser, name, check=True, ignoreTarget=targetIgnored)
+
+Parser.exprToken["ignoreOnClient"] = ignoreTarget
+Parser.exprToken["ignoreOnServer"] = ignoreTarget
 Parser.exprToken["i32"] = lambda parser: Error.parseError(parser, "unexpected type int")
 Parser.exprToken["|"] = lambda parser: Error.parseError(parser, "unexpected function declaration")
 Parser.exprToken["int"] = lambda parser: Error.parseError(parser, "unexpected type int")

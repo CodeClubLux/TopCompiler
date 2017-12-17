@@ -309,11 +309,12 @@ class Unknown(Type):
 
     @property
     def normalName(self):
-        if self.typ.normalName == "":
+        if not (self.typ and self.typ.normalName != ""):
             s = self
             class MockString:
                 def __eq__(self, other):
-                    if s.typ.normalName != "":
+                    if other == "": return
+                    if s.typ and s.typ.normalName != "":
                         return other == self.typ.normalName
                     else:
                         s.typ.normalName = other

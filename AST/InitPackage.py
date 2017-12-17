@@ -11,11 +11,19 @@ class InitPack(Node):
         self.thisPackage = parser.package
 
     def compileToJS(self, codegen):
+        nextNum = str(codegen.count + 1)
+        codegen.count += 1
+
+        codegen.append(codegen.tree._context + "=" + nextNum)
+        codegen.append(";return ")
+
         if self.target == "full":
-            codegen.client_main_parts.append(self.package+"_clientInit();")
-            codegen.node_main_parts.append(self.package+"_nodeInit();")
+            codegen.client_main_parts.append(self.package + "_clientInit(" + codegen.tree._name + ");")
+            codegen.node_main_parts.append(self.package + "_nodeInit(" + codegen.tree._name + ");")
         else:
-            codegen.append(self.package+"_" + self.target + "Init();")
+            codegen.append(self.package + "_" + self.target + "Init("+ codegen.tree._name +");")
+
+        codegen.tree.case(codegen, nextNum, self)
 
     def validate(self, parser): pass
 
@@ -28,6 +36,9 @@ class Import(Node):
 
     def compileToJS(self, codegen):
         for (i, target) in self.names:
+            if target == "mustFull":
+                target = "full"
+
             codegen.target = target
             varName = self.package+"_"+i
 
@@ -37,7 +48,7 @@ class Import(Node):
         for (i, target) in self.names:
             c = Vars.Create(i, Types.Null(), self)
             c.package = self.thisPackage;
-            c.target = target
+            c.target = "full" if target == "mustFull" else target
             c.isGlobal = True
 
             self.owner.before.append(c)
