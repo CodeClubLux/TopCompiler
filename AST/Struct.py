@@ -149,7 +149,8 @@ class Field(Node):
             case = i.const[i.field]
             index = list(i.const.keys()).index(i.field)
             v = codegen.getName()
-            codegen.append("return "+self.package+"_"+self.field)
+            codegen.append("return "+self.enum.package+ "_" + i.field)
+
             if len(case) == 1:
                 codegen.append("(")
             else:
@@ -168,7 +169,7 @@ class Field(Node):
         if self.newValue:
             codegen.append("return Object.assign(new "+old+".constructor(), "+old+",{"+self.field+":"+self.newValue+"})")
         else:
-            codegen.append("return Object.assign(new "+old+".constructor(), {"+self.field+":"+"(function("+old+"){")
+            codegen.append("return Object.assign(new "+old+".constructor(), "+old+",{"+self.field+":"+"(function("+old+"){")
             self.owner.set(old, codegen)
             codegen.append("})("+old+"."+self.field+")})")
 

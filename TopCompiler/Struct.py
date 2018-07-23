@@ -54,6 +54,9 @@ class Struct:
     def isType(self, other):
         return type(self) is other
 
+    def duckType(self, parser, other, node, mynode, iter):
+        node.error("Expecting type "+str(self)+" not "+str(other))
+
     def hasMethod(self, parser, name):
         packages = []
         b = None

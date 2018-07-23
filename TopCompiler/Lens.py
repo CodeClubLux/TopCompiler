@@ -119,31 +119,16 @@ def typeCheckLens(parser, lens):
 
     A = Types.T("A", Types.All, "Lens")
 
-    """"
-    replaceGen = {}
-    for i in enum.remainingGen:
-        replaceGen[i] = B
-    r = Types.replaceT(r, replaceGen)
-
-    replaceGenForB = {}
-    for i in enum.remainingGen:
-        replaceGenForB[i] = r
-
-    print("====")
-    print(before_enum)
-    print(replaceGen)
-
-    B = Types.replaceT(before_enum, replaceGen)
-    maybe = True
-    return loop(n.nodes[0], enum)
-    """
-
     oB = B
 
     if maybe:
         B = Types.replaceT(parser.Maybe, {"Maybe.T" : oB})
         name = "MaybeLens"
-        A.owner = name
+
+        if lens_typ.isType(Types.Enum):
+            A = lens_typ
+        else:
+            A.owner = name
         B.owner = name
     else:
         B = B

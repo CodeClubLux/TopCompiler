@@ -329,6 +329,13 @@ function Maybe_withDefault(self,def){
     }
 }
 
+function Maybe_toString(self) {
+    if (self[0] == 0) {
+        return "Some("+self[1].toString()+")";
+    } else {
+        return "None"
+    }
+}
 
 function Maybe_map(self,func){
     if (self[0] == 0) {
@@ -346,9 +353,90 @@ Maybe.prototype.map = function(func){
     return Maybe_map(this,func);
 }
 
+Maybe.prototype.toString = function() {
+    return Maybe_toString(this);
+}
+
 function sleep(time, callback) {
     setTimeout(callback, time);
 }
+
+function Result(x) {
+    this[0] = x;
+}
+
+function Ok(x) {
+    var s = new Result(0);
+    s[1] = x;
+    return s;
+}
+
+function Error(x) {
+    var s = new Result(1);
+    s[1] = x;
+    return s;
+}
+
+function Result_toString(self) {
+    if (self[0] == 0) {
+        return "Ok(" + self[1].toString() + ")"
+    } else {
+        return "Error(" + self[1].toString() + ")"
+    }
+}
+
+function Result_map(self, f) {
+    if (self[0] == 0) {
+        return Ok(f(self[1]));
+    } else {
+        return self;
+    }
+}
+
+function Result_mapError(self, f) {
+    if (self[0] == 0) {
+        return self;
+    } else {
+        return Error(f(self[1]));
+    }
+}
+
+function Result_withDefault(self, x) {
+    if (self[0] == 0) {
+        return self[1];
+    } else {
+        return x;
+    }
+}
+
+function Result_toMaybe(self) {
+    if (self[0] == 0) {
+        return Some(self[1]);
+    } else {
+        return None;
+    }
+}
+
+Result.prototype.toMaybe = function() {
+    return Result_toMaybe(this);
+}
+
+Result.prototype.map = function(f) {
+    return Result_map(this,f);
+}
+
+Result.prototype.mapError = function(f) {
+    return Result_mapError(this,f);
+}
+
+Result.prototype.withDefault = function(x) {
+    return Result_withDefault(this,x);
+}
+
+Result.prototype.toString = function(){
+    return Result_toString(this);
+}
+
 
 function parallel(funcs, next) {
     var count = 0;
@@ -394,89 +482,14 @@ function serial(funcs, next) {
 }
 
 function core_assign(construct, obj) {
+    var changed = false;
+    for (var name in obj) {
+        if (construct[name] !== obj[name]) {
+            changed = true;
+        }
+    }
+    if (!changed) { return construct }
     return Object.assign(new construct.constructor(), construct, obj);
-}
-
-function core_json_int(obj) {
-    return obj | 0;
-}
-
-function core_json_float(obj) {
-    return obj;
-}
-
-function core_json_bool(obj) {
-    return !!obj;
-}
-
-function core_json_string(obj) {
-    return ""+obj;
-}
-
-function core_json_struct(constr, array) {
-    return function(realObj) {
-        var len = array.length;
-        var obj = new constr();
-        for (var i = 0; i < len; i++) {
-            var arr = array[i];
-            obj[arr[0]] = arr[1](realObj[arr[0]]);
-        }
-        return obj;
-    }
-}
-
-function core_json_interface(array) {
-    return function (realObj) {
-        var obj = {};
-        var len = array.length;
-        for (var i = 0; i < len; i++) {
-            var arr = array[i];
-            obj[arr[0]] = arr[1](realObj[arr[0]]);
-        }
-        return obj;
-    }
-}
-
-function core_json_enum(typ, array) {
-    return function(realObj) {
-        var iter = realObj[0]
-        var _enum = new typ(iter);
-        for (var i = 1; i < array[iter].length+1; i++) {
-            _enum[i] = array[iter][i - 1](realObj[i]);
-        }
-        return _enum;
-    }
-}
-
-//root, len, depth, start
-
-function core_json_vector(decoder) {
-    return function (realObj) {
-        if (realObj.root) {
-            var vector = new Vector(realObj.root, realObj.length, realObj.depth, realObj.start);
-            return vector;
-        }
-        return fromArray(realObj.map(decoder));
-    }
-}
-
-function core_json_tuple(decoder) {
-    return function (arr) {
-        var a = [];
-        for (var i = 0; i < arr.length; i++) {
-            a.push(decoder[i](arr[i]));
-        }
-        return a;
-    }
-}
-
-function parseJson(decoder, str) {
-    var obj = JSON.parse(str);
-    return decoder(obj);
-}
-
-function jsonStringify(i) {
-    return JSON.stringify(i);
 }
 function Vector(root, len, depth, start) {
     this.shift = (depth - 1) * this.bits;
@@ -851,6 +864,10 @@ function newVector() {
 }
 
 function fromArray(arr) {
+    if (!arr) {
+        return EmptyVector;
+    }
+
     var v = EmptyVector;
     for (var i = 0; i < arr.length; i++) {
         v = v.append_m(arr[i]);
@@ -1088,4 +1105,156 @@ function dict(obj,lt) {
     map = map.set(res[0], res[1]);
   }
   return map;
+}
+function core_json_int(obj) {
+    var n = Number(obj);
+    if (isNaN(n)) {
+        return Error(toString(obj)+" is not a number");
+    } else {
+        return Ok(n | 0);
+    }
+}
+
+function core_json_float(obj) {
+    var n = Number(obj);
+    if (isNaN(n)) {
+        return Error(toString(obj)+" is not a number");
+    } else {
+        return Ok(n);
+    }
+}
+
+function core_json_bool(obj) {
+    if (typeof obj == "boolean") {
+        return Ok(obj);
+    } else {
+        return Error(toString(obj)+" is not a boolean")
+    }
+}
+
+function core_json_string(obj) {
+    if (typeof obj == "string") {
+        return Ok(obj);
+    } else {
+        return Error(toString(obj) + " is not a boolean")
+    }
+}
+
+function core_json_struct(constr, array) {
+    return function core_json_struct(realObj) {
+        if (typeof realObj !== "object") {
+            return Error(toString(realObj)+ " cannot be converted to a struct")
+        }
+        var len = array.length;
+        var obj = new constr();
+        for (var i = 0; i < len; i++) {
+            var arr = array[i];
+            var newValue = arr[1](realObj[arr[0]]);
+            if (newValue[0] == 1) {
+                return Error("Field "+arr[0]+" of struct : "+newValue[1]);
+            } else {
+                obj[arr[0]] = newValue[1];
+            }
+        }
+        console.log("Converted to struct");
+        console.log(obj);
+        return Ok(obj);
+    }
+}
+
+function core_json_interface(array) {
+    return function core_json_interface(realObj) {
+        if (typeof realObj !== "object") {
+            return Error(toString(realObj)+ " cannot be converted to an interface")
+        }
+
+        var obj = {};
+        var len = array.length;
+        for (var i = 0; i < len; i++) {
+            var arr = array[i];
+            var newValue = arr[1](realObj[arr[0]]);
+            if (newValue[0] == 1) {
+                return Error("Field "+arr[0]+" of interface : "+newValue[1]);
+            } else {
+                obj[arr[0]] = newValue[1];
+            }
+        }
+        return Ok(obj);
+    }
+}
+
+function core_json_enum(typ, array) {
+    return function core_json_enum(realObj) {
+        if (typeof realObj !== "object" && !Array.isArray(realObj)) {
+            return Error(toString(realObj)+ " cannot be converted to a enum")
+        }
+        var iter = realObj[0]
+        var _enum = new typ(iter);
+        for (var i = 1; i < array[iter].length+1; i++) {
+            var newValue = array[iter][i - 1](realObj[i]);
+            if (newValue[0] == 0) {
+                _enum[i] = newValue[1];
+            } else {
+                return Error("Field "+iter+" of enum : "+newValue[1]);
+            }
+        }
+        return Ok(_enum);
+    }
+}
+
+//root, len, depth, start
+
+function core_json_vector(decoder) {
+    return function core_json_vector(realObj) {
+        if (realObj.root && realObj.length && realObj.depth && realObj.start) {
+            var vector = new Vector(realObj.root, realObj.length, realObj.depth, realObj.start);
+            return vector;
+        } else if (!Array.isArray(realObj)) {
+            return Error(toString(realObj)+ " cannot be converted to a vector")
+        }
+
+        var newArray = EmptyVector;
+
+        for (var i = 0; i < realObj.length; i++) {
+            var newValue = decoder(realObj[i]);
+            if (newValue[0] == 0) {
+                newArray = newArray.append_m(newValue[1]);
+            } else {
+                return Error("Index "+i+" in array : "+newValue[1]);
+            }
+        }
+        return Ok(newArray);
+    }
+}
+
+function core_json_tuple(decoder) {
+    return function core_json_tuple(arr) {
+        if (!Array.isArray(arr)) {
+            return Error(toString(arr)+ " cannot be converted to a tuple")
+        }
+
+        var a = [];
+        for (var i = 0; i < arr.length; i++) {
+            var newValue = decoder[i](arr[i]);
+            if (newValue[0] == 0) {
+                a.push(newValue[1]);
+            } else {
+                return Error("Index "+i+" of tuple : "+newValue[1]);
+            }
+        }
+        return Ok(a);
+    }
+}
+
+function parseJson(decoder, str) {
+    try {
+        var obj = JSON.parse(str);
+    } catch(e) {
+        return Error(toString(e));
+    }
+    return decoder(obj);
+}
+
+function jsonStringify(i) {
+    return JSON.stringify(i);
 }

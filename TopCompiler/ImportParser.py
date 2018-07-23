@@ -137,8 +137,8 @@ def fromParser(parser, decl= False, stage=False):
     parser.nextToken()
 
     names = []
-    if not decl:
-        parser.currentNode.addNode(Tree.Import(name, parser.package, names, parser))
+    #if not decl:
+        #parser.currentNode.addNode(Tree.Import(name, parser.package, names, parser))
 
     def getName(token, nameOfVar=""):
         if nameOfVar == "":

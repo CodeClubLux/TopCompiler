@@ -14,7 +14,8 @@ def parseJson(parser):
 
     typ = Types.parseType(parser)
 
-    parse.type = Types.FuncPointer([Types.All], typ)
+    parse.type = Types.replaceT(parser.Decoder, {"Decoder.T": typ})
+
     parse.shouldBeTyp = typ
 
     parser.currentNode = parse.owner

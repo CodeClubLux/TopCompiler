@@ -73,6 +73,27 @@ class CodeGen:
             #if not type(i) in [Tree.FuncCall,Tree.If,Tree.Match,Tree.FuncBody,Tree.Create,Tree.Assign,Tree.CreateAssign,Tree.Tree.FuncBraceOpen,Tree.FuncStart] and i.type.name == "none":
             #    self.append(";")
 
+    def toCppHelp(self, tree=None, isGlobal=True):
+        if tree is None:
+            tree = self.tree
+        out = ""
+
+        tree.res = self.getName()
+        tree._name = self.getName()
+        tree._context = self.getName()
+
+        if self.opt > 0:
+            # variable declarations
+            self.inAFunction = True
+            for i in tree.before:
+                self.target = i.global_target
+                i.compileToCpp(self)
+            self.inAFunction = False
+
+        for i in tree:
+            self.target = i.global_target
+            i.compileToCpp(self)
+
     def toEvalHelp(self):
         tree = self.tree
 
@@ -158,6 +179,28 @@ class CodeGen:
 
             return _compile(self.out, self.main, self.global_target)
 
+
+    def toCpp(self):
+        if self.filename == "main":
+            _next = ""
+        else:
+            _next = self.getName()
+
+        def _compile(out, main, target):
+            return "void " + str(self.filename) + "_" + "Init("+_next+"){var " + self.tree._context + "=0;" + \
+                   "return function " + self.tree._name + "(" + self.tree.res + "){" + \
+                   "while(1){switch (" + self.tree._context + "){case 0:" + main + "; return "+(_next+"();" if _next != "" else ";") + "}}}()}" + \
+                   out
+
+            main = self.filename == "main"
+
+            self.toCPPHelp()
+
+            self.out = "".join(self.out_parts)
+            self.main = "".join(self.main_parts)
+
+            return _compile(self.out, self.main, self.global_target)
+
     def toEval(self):
         main = "main"
 
@@ -230,6 +273,9 @@ class CodeGen:
         if target == "full":
             (node, client) = self.toJS(target)
 
+            #node = node.replace(";", ";\n")
+            #client = client.replace(";", ";\n")
+
             try:
                 f = open("lib/" + self.filename.replace("/", ".") + "-node.js", mode="w")
                 f.write(node)
@@ -270,19 +316,54 @@ def getRuntimeNode():
     file = open(runtimeName, mode="r")
     return file.read()
 
+def linkCPP(filenames, output, run, debug, opt, dev, linkWith, target, hotswap):
+    buildsteps = """
+    IDIR =../include
+CC=g++
+CFLAGS=-I$(IDIR)
+
+ODIR=obj
+LDIR =../lib
+
+LIBS=-lm
+
+_DEPS = hellomake.h
+DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
+
+_OBJ = hellomake.o hellofunc.o
+OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
+
+
+$(ODIR)/%.o: %.c $(DEPS)
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+hellomake: $(OBJ)
+	gcc -o $@ $^ $(CFLAGS) $(LIBS)
+
+.PHONY: clean
+
+clean:
+	rm -f $(ODIR)/*.o *~ core $(INCDIR)/*~ """
+
+    for filename in filenames:
+        buildsteps += ""
+
+    makefile = open(output + "-makefile")
+    makefile.write(buildsteps)
+
+
+
 
 def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target, hotswap):
+    if target == "cpp":
+        linkCPP(filenames, output, run, debug, opt, dev, linkWith, target, hotswap)
+
     needSocket = False
+    socket = ""
 
-    if target == "client":
-        f = open("bin/assets.json", "w")
-        f.write("""{
-            "css": [ """+",".join(('"'+i+'"' for i in linkWithCSS))+""" ],
-            "js": [ \"bin/""" + output + '-client.js' + '"' + """ ]
-        }""")
-
+    terminal = ""
     if target == "client" and debug:
-        terminal = open(__file__[0:__file__.rfind("/") + 1] + "terminal/bundle.html").read()
+        terminal = open(__file__[0:__file__.rfind("/") + 1] + "terminal/debugger.js").read()
 
         needSocket = True
         linked = ""
@@ -291,7 +372,9 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
         linked = ""
 
     if opt == 3:
-        linked = "(function(){"
+        linked = "(function(){ var production = true;"
+    else:
+        linked = "var production = false;"
 
     import sys
 
@@ -300,8 +383,6 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
     linked += runtime
 
     css = ""
-
-
 
     if target == "client" and debug:
             linked += """log= function(d) {
@@ -380,6 +461,38 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
 
         css += '<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>'
 
+    if target == "client":
+        if (dev and not hotswap):
+            linked += terminal
+            socket = '<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>'
+            socket += ('<div id="error" style="z-index: 10000000; width: 100%; background-color: #42f4eb; position: fixed; bottom: 0; font-family: "Segoe UI", Frutiger, "Frutiger Linotype", "Dejavu Sans", "Helvetica Neue", Arial, sans-serif; padding-left: calc(50% - 123px);"></div>')
+            #socket += terminal
+
+            files = """https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js
+https://cdn.jsdelivr.net/npm/jquery-resizable@1.0.6/resizable.js
+https://cdn.jsdelivr.net/npm/jquery-resizable@1.0.6/resizable.css
+https://cdnjs.cloudflare.com/ajax/libs/jquery.terminal/1.11.0/css/jquery.terminal.min.css
+https://cdnjs.cloudflare.com/ajax/libs/jquery.terminal/1.11.0/js/jquery.terminal.min.js"""
+
+            if debug:
+                for cdnFile in files.split("\n"):
+                    if cdnFile.endswith(".css"):
+                        socket += '<link rel="stylesheet" type="text/css" href="'+cdnFile+'"></link>'
+                    else:
+                        socket += '<script src="' + cdnFile + '"></script>'
+
+                socket += '<div id="container" style="padding-top: 50px; margin-top: -10px; padding-bottom: 100px; color: white; margin-right: 10px; position: fixed; display: inline-block; float: left; height: 100%; background-color: black; width: 30%;"><button id="switchMode" style="position: fixed; color: black; z-index: 100000; top: 20; margin-left: 10px;so">Time Travel</button><div id="terminal" style="position: fixed; width: inherit; height: 90%;"></div></div>'
+
+            socket = socket.replace('"', "'").replace("\n", " ")
+        else:
+            socket = ""
+        f = open("bin/assets.json", "w")
+        f.write("""{
+            "css": [ """+",".join(('"'+i+'"' for i in linkWithCSS))+""" ],
+            "js": [ \"bin/""" + output + (".min" if opt == 3 else "") + '-client.js"' + """],
+            "hotSwappingCode": \"""" + socket + """\"
+        }""")
+
     array = []
     # print("====", target)
     for i in linkWith:
@@ -422,8 +535,8 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
     if opt == 3:
         linked += "})()"
 
-    import jsbeautifier
-    linked = jsbeautifier.beautify(linked)
+    #import jsbeautifier
+    #linked = jsbeautifier.beautify(linked)
 
     fjs.write(linked)
     fjs.close()
@@ -462,8 +575,7 @@ def link(filenames, output, run, debug, opt, dev, linkWith, linkWithCSS, target,
     </head>
     <body>
         """ + ('<div id="container" style="padding-top: 50px; margin-top: -10px; padding-bottom: 100px; color: white; margin-right: 10px; position: fixed; display: inline-block; float: left; height: 100%; background-color: black; width: 30%;"><button id="switchMode" style="position: fixed; color: black; z-index: 100000; top: 20; margin-left: 10px;so">Time Travel</button><div id="terminal" style="position: fixed; width: inherit; height: 90%;"></div></div><div id= "code" style= "float: right; width: 70%; position: relative;"></div>' if needSocket else '<div id= "code"></div>') + """
-        """ + ('<div id="error" style="z-index: 10000000; width: 100%; background-color: #42f4eb; position: fixed; bottom: 0; font-family: &quot;Segoe UI&quot;, Frutiger, &quot;Frutiger Linotype&quot;, &quot;Dejavu Sans&quot;, &quot;Helvetica Neue&quot;, Arial, sans-serif; padding-left: calc(50% - 123px);"></div>' if (dev and not hotswap) else "") + """
-        """+('<script>' + socket + "</script>"+terminal if needSocket else '') + """
+        """+ socket + """
         <script>
         """ + linked + """
         </script>
@@ -490,6 +602,9 @@ def execNode(outputFile, dev):
     else:
         args = ["node", outputFile + "-node.js"]
         subprocess.call(args, cwd="bin/")
+
+def execCpp(outputFile, dev):
+    args = ["./"+""]
 
 class Info:
     def __init__(self):

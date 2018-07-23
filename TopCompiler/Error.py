@@ -19,7 +19,7 @@ def parseError(parser, message):
 
 def errorAst(message, package, filename, token):
     #print(message)
-    if message.startswith("expecting type http.Response, not none"):
+    if message.startswith("variable"):
         print("wierd")
     from TopCompiler import topc
     html = '<div class="error">'

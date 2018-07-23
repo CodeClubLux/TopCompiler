@@ -317,8 +317,10 @@ class Unknown(Type):
                     if s.typ and s.typ.normalName != "":
                         return other == self.typ.normalName
                     else:
-                        s.typ.normalName = other
-                        return True
+                        if s.typ:
+                            s.typ.normalName = other
+                            return True
+                        return False
 
                 def __ne__(self, other):
                     return not other == self

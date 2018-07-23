@@ -155,7 +155,7 @@ def handle_message(line):
             f = parser.filename
 
             for i in range(3):
-                ResolveSymbols._resolve(parser, tokens[0], "_", i)
+                ResolveSymbols._resolve(tokens[0], parser, "_", i)
 
             parser.currentNode = Tree.Root()
 
@@ -207,8 +207,7 @@ def handle_message(line):
         parser.filename = parser._filename
 
         socketio.emit("error", str(e))
-
-        topdev.removeTransforms(topc.global_parser)
+        topdev["removeTransforms"](topc.global_parser)
 
         if lock:
             lock.release()

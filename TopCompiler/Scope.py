@@ -14,6 +14,7 @@ class Type :
         self.type = type
         self.target = target
         self.imported = False
+        self.package = ""
 
     def __repr__(self):
         return str(self.type)
@@ -24,6 +25,9 @@ def incrScope(parser):
 def addVar(node, parser, name, type, _global=False):
     if not parser.repl and varExists(parser, parser.package, name):
         node.error( "variable "+name+" already exists")
+
+    if type.package == "":
+        type.package = parser.package
 
     if _global:
         parser.scope[parser.package][0][name] = type
@@ -39,6 +43,7 @@ def addFunc(node, parser, name, typ, target= True):
         node.error("function "+name+" already exists")
 
     parser.scope[parser.package][-2][name] = Type(type= typ, imutable= imutable, target=target)
+    parser.scope[parser.package][-2][name].package = parser.package
     return
 
 def decrScope(parser):
@@ -92,7 +97,6 @@ def typeOfVar(node, parser, package, name):
         except: pass
     node.error("variable "+name+" does not exist")
 
-
 def targetOfVar(node, parser, package, name):
     if name in parser.imports and not name in parser.from_imports: return parser.global_target
     if package == parser.package:
@@ -112,6 +116,11 @@ def packageOfVar(parser, package, name):
         for i in parser.scope["_global"]:
             if name in i:
                 return ""
+
+        for i in parser.scope[package]:
+            try:
+                return i[name].package
+            except: pass
 
     return package
 

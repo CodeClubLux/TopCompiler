@@ -347,7 +347,6 @@ def transform(body):
 
         return o_iter
 
-
     loop(body, 0)
 
 class Context(Node):
@@ -417,7 +416,7 @@ class FuncCall(Node):
             codegen.append("("+",".join(names)+");}})(")
         else:
             if self.nodes[0].type.do and self.tail:
-                codegen.append("setTimeout(function(){")
+                codegen.append("return setTimeout(function(){")
 
             self.nodes[0].compileToJS(codegen)
             if self.curry and len(self.nodes[1:]) == 0:
@@ -429,14 +428,20 @@ class FuncCall(Node):
                 codegen.append("(")
 
         if self.tail and not self.nodes[0].type.do:
+            genNames = []
             for iter in range(len(self.nodes)-1):
                 i = self.nodes[iter+1]
 
                 name = codegen.readName(self.body.package + "_" + self.body.names[iter])
                 print(name)
-                codegen.append(name+"=")
+                tmp = codegen.getName()
+                codegen.append("var "+tmp+"=")
                 i.compileToJS(codegen)
                 codegen.append(";")
+                genNames.append((name,tmp))
+
+            for (realName,tmp) in genNames:
+                codegen.append(realName+"="+tmp+";")
 
             codegen.append(self.body._continue+"=true;")
             return
@@ -463,10 +468,14 @@ class FuncCall(Node):
 
         if yilds:
             codegen.append(";")
+            if str(self.nodes[0]) == ".send":
+                if str(self.nodes[0].nodes[0]) == ".author":
+                    print("Error")
+
             self.outer_scope.case(codegen, nextNum, self)
 
         if self.nodes[0].type.do and self.tail:
-            codegen.append("; }, 0);")
+            codegen.append("; }, 0); }")
 
         elif self.type == Types.Null():
             codegen.append(";")

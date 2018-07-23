@@ -35,6 +35,7 @@ class Import(Node):
         self.names = names
 
     def compileToJS(self, codegen):
+        return
         for (i, target) in self.names:
             if target == "mustFull":
                 target = "full"

@@ -128,6 +128,6 @@ class Decoder(Node):
                     codegen.append(",")
                 codegen.append("])")
             else:
-                codegen.append("function(arg) { return arg }")
+                codegen.append("function(arg) { return Ok(arg); }")
 
         loop(typ)

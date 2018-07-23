@@ -11,7 +11,6 @@ import os
 import time
 from TopCompiler import socketRepl
 from TopCompiler import HindleyMilner
-socketRepl.topdev = globals()
 import threading
 
 mutex = threading.Lock()
@@ -27,10 +26,12 @@ def removeTransforms(parser):
         for i in tr:
             Module.removeModule(i)
 
+socketRepl.topdev = globals()
+
 def main():
     debug = False
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--" and sys.argv[2] == "debug":
+        if sys.argv[1] == "-debug":
             debug = True
         else:
             print("Unexpected", sys.argv[1])

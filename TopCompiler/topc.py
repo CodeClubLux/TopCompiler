@@ -451,6 +451,7 @@ def start(run= False, _raise=False, dev= False, doc= False, init= False, _hotswa
                         CodeGen.CodeGen(i, parser.compiled[i][1][0], parser.compiled[i][1][1], target, opt).compile(opt=opt)
 
 
+                print(parser.orderOfUsedModules)
                 for i in parser.orderOfUsedModules:
                     tmp = os.path.dirname(parser.filenames[i][0][0])
 

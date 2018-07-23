@@ -100,8 +100,6 @@ def compile(target):
                 res = open("bin/code-node.js", mode="r").read()
                 os.chdir("../../")
 
-
-
                 res =  """<html>
                     <head></head>
                     <body>
@@ -173,8 +171,6 @@ def compile(target):
                 f.write(client)
 
                 return html
-
-
 
             elif target == "client":
                 client = open("bin/code-Client.js").read()

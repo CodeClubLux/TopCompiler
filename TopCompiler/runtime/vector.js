@@ -371,6 +371,10 @@ function newVector() {
 }
 
 function fromArray(arr) {
+    if (!arr) {
+        return EmptyVector;
+    }
+
     var v = EmptyVector;
     for (var i = 0; i < arr.length; i++) {
         v = v.append_m(arr[i]);

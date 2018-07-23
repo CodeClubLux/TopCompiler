@@ -4,7 +4,7 @@ import requests
 
 url = 'https://javascript-minifier.com/raw'
 
-files = ["dom.js", "number.js", "utility.js", "vector.js", "dict.js"]
+files = ["dom.js", "number.js", "utility.js", "vector.js", "dict.js", "decoder.js"]
 
 filesC = [open("runtime/"+i, "r").read() for i in files]
 

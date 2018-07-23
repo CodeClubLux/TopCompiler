@@ -702,10 +702,10 @@ def infer(parser, tree):
                                 else:
                                     ctype = c.type
                                 try:
-                                    typ.duckType(parser, ctype, i, c, count)
+                                    typ.duckType(parser, ctype, c, c, count)
                                 except EOFError as prevE:
                                     try:
-                                        ctype.duckType(parser, typ, c, i, count)
+                                        ctype.duckType(parser, typ, c, c, count)
                                         typ = ctype
                                     except EOFError as e:
                                         """try:
@@ -921,9 +921,6 @@ def resolveGen(shouldBeTyp, normalTyp, generics, parser, myNode, other):
             normalTyp = newTyp
 
             normalTyp = resolveGen(tmp.type, newTyp, generics, parser, myNode, other)
-
-                #print(normalTyp)
-                #print(newTyp)
 
             normalTyp.duckType(parser, newTyp, myNode, other, 0)
             normalTyp = newTyp

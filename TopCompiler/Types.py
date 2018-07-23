@@ -841,8 +841,6 @@ class Enum(Type):
         return replaceT(b, attachTyp.generic)
 
     def duckType(self, parser, other, node, mynode, iter):
-        
-        
         if self.normalName != other.normalName:
             node.error("expecting type "+self.name+", not "+str(other))
 

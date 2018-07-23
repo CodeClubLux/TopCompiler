@@ -265,6 +265,13 @@ function Maybe_withDefault(self,def){
     }
 }
 
+function Maybe_toString(self) {
+    if (self[0] == 0) {
+        return "Some("+self[1].toString()+")";
+    } else {
+        return "None"
+    }
+}
 
 function Maybe_map(self,func){
     if (self[0] == 0) {
@@ -282,9 +289,90 @@ Maybe.prototype.map = function(func){
     return Maybe_map(this,func);
 }
 
+Maybe.prototype.toString = function() {
+    return Maybe_toString(this);
+}
+
 function sleep(time, callback) {
     setTimeout(callback, time);
 }
+
+function Result(x) {
+    this[0] = x;
+}
+
+function Ok(x) {
+    var s = new Result(0);
+    s[1] = x;
+    return s;
+}
+
+function Error(x) {
+    var s = new Result(1);
+    s[1] = x;
+    return s;
+}
+
+function Result_toString(self) {
+    if (self[0] == 0) {
+        return "Ok(" + self[1].toString() + ")"
+    } else {
+        return "Error(" + self[1].toString() + ")"
+    }
+}
+
+function Result_map(self, f) {
+    if (self[0] == 0) {
+        return Ok(f(self[1]));
+    } else {
+        return self;
+    }
+}
+
+function Result_mapError(self, f) {
+    if (self[0] == 0) {
+        return self;
+    } else {
+        return Error(f(self[1]));
+    }
+}
+
+function Result_withDefault(self, x) {
+    if (self[0] == 0) {
+        return self[1];
+    } else {
+        return x;
+    }
+}
+
+function Result_toMaybe(self) {
+    if (self[0] == 0) {
+        return Some(self[1]);
+    } else {
+        return None;
+    }
+}
+
+Result.prototype.toMaybe = function() {
+    return Result_toMaybe(this);
+}
+
+Result.prototype.map = function(f) {
+    return Result_map(this,f);
+}
+
+Result.prototype.mapError = function(f) {
+    return Result_mapError(this,f);
+}
+
+Result.prototype.withDefault = function(x) {
+    return Result_withDefault(this,x);
+}
+
+Result.prototype.toString = function(){
+    return Result_toString(this);
+}
+
 
 function parallel(funcs, next) {
     var count = 0;
@@ -330,87 +418,12 @@ function serial(funcs, next) {
 }
 
 function core_assign(construct, obj) {
+    var changed = false;
+    for (var name in obj) {
+        if (construct[name] !== obj[name]) {
+            changed = true;
+        }
+    }
+    if (!changed) { return construct }
     return Object.assign(new construct.constructor(), construct, obj);
-}
-
-function core_json_int(obj) {
-    return obj | 0;
-}
-
-function core_json_float(obj) {
-    return obj;
-}
-
-function core_json_bool(obj) {
-    return !!obj;
-}
-
-function core_json_string(obj) {
-    return ""+obj;
-}
-
-function core_json_struct(constr, array) {
-    return function(realObj) {
-        var len = array.length;
-        var obj = new constr();
-        for (var i = 0; i < len; i++) {
-            var arr = array[i];
-            obj[arr[0]] = arr[1](realObj[arr[0]]);
-        }
-        return obj;
-    }
-}
-
-function core_json_interface(array) {
-    return function (realObj) {
-        var obj = {};
-        var len = array.length;
-        for (var i = 0; i < len; i++) {
-            var arr = array[i];
-            obj[arr[0]] = arr[1](realObj[arr[0]]);
-        }
-        return obj;
-    }
-}
-
-function core_json_enum(typ, array) {
-    return function(realObj) {
-        var iter = realObj[0]
-        var _enum = new typ(iter);
-        for (var i = 1; i < array[iter].length+1; i++) {
-            _enum[i] = array[iter][i - 1](realObj[i]);
-        }
-        return _enum;
-    }
-}
-
-//root, len, depth, start
-
-function core_json_vector(decoder) {
-    return function (realObj) {
-        if (realObj.root) {
-            var vector = new Vector(realObj.root, realObj.length, realObj.depth, realObj.start);
-            return vector;
-        }
-        return fromArray(realObj.map(decoder));
-    }
-}
-
-function core_json_tuple(decoder) {
-    return function (arr) {
-        var a = [];
-        for (var i = 0; i < arr.length; i++) {
-            a.push(decoder[i](arr[i]));
-        }
-        return a;
-    }
-}
-
-function parseJson(decoder, str) {
-    var obj = JSON.parse(str);
-    return decoder(obj);
-}
-
-function jsonStringify(i) {
-    return JSON.stringify(i);
 }

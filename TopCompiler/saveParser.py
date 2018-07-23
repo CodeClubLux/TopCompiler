@@ -7,7 +7,6 @@ def save(parser, port=False):
 
     f = open("lib/parser.p", "wb")
 
-    print("port is", port)
     if port != False:
         parser.rootAst = 0
         parser.currentNode = 0

@@ -14,6 +14,9 @@ class Lens(Node):
 
         def loop(n):
             for i in n:
+                if not i.isEnd():
+                    loop(i)
+
                 if type(i) is Tree.Field:
                     if i.pattern:
                         codegen.append('+"' + "$" + i.field + '"')
@@ -24,8 +27,6 @@ class Lens(Node):
                     i.nodes[1].compileToJS(codegen)
                     codegen.append('+"]"')
 
-                if not i.isEnd():
-                    loop(i)
 
         self.nodes[0].newValue = name
         codegen.append("newLens(function("+name+"){return ")

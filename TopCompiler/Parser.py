@@ -373,12 +373,40 @@ class Parser:  # all mutable state
             [Types.All, Maybe_T],
             Maybe_T
         )
+        Maybe.methods["_global"]["toString"] = Types.FuncPointer([Types.All], Types.String())
 
         Maybe.methods["_global"]["map"] = Types.FuncPointer(
             [Types.All, Types.FuncPointer([Maybe_T], Maybe_R)],
             Types.replaceT(Maybe, {"Maybe.T": Maybe_R}),
             generic = coll.OrderedDict([("R", Maybe_R)])
         )
+
+
+
+        Result_A = Types.T("A", All, "Result")
+        Result_B = Types.T("B", All, "Result")
+        Result_R = Types.T("R", All, "Result")
+
+        Result_gen = coll.OrderedDict([("Result.A", Result_A),("Result.B",Result_B)])
+
+        Result = Types.Enum("_global", "Result", coll.OrderedDict([("Ok", [Result_A]), ("Error", [Result_B])]), generic=Result_gen)
+        Result.methods["_global"] = {}
+        Result.methods["_global"]["toMaybe"] = Types.FuncPointer([All], Types.replaceT(Maybe, {"Maybe.T": A})),
+        Result.methods["_global"]["map"] = Types.FuncPointer(
+            [Types.All,Types.FuncPointer([Result_A], Result_R)],
+            Types.replaceT(Result, {"Result.A": Result_R}),
+            generic = coll.OrderedDict([("R", Result_R)])
+        )
+        Result.methods["_global"]["withDefault"] = Types.FuncPointer(
+            [Types.All, Result_A],
+            Result_A
+        )
+        Result.methods["_global"]["mapError"] = Types.FuncPointer(
+            [Types.All, Types.FuncPointer([Result_B], Result_R)],
+            Types.replaceT(Result, {"Result.B": Result_R}),
+            generic=coll.OrderedDict([("R", Result_R)])
+        )
+        Result.methods["_global"]["toString"] = Types.FuncPointer([Types.All], Types.String())
 
         A = Types.T("A", All, "MaybeLens")
         B = Types.T("B", All, "MaybeLens")
@@ -391,6 +419,19 @@ class Parser:  # all mutable state
 
         self.Maybe = Maybe
 
+        Decoder_T = Types.T("T", All, "Decoder")
+
+        Decoder = Types.Alias("_global", "Decoder",
+            Types.FuncPointer(
+                [All],
+                Types.replaceT(Result, {"Result.A": Decoder_T, "Result.B": Types.String()}),
+            ),
+            coll.OrderedDict([("Decoder.T", Decoder_T)])
+        )
+
+        self.Result = Result
+        self.Decoder = Decoder
+
         assign_T = Types.T("T", All, "assign")
 
         parseT = Types.T("T", All, "parseJson")
@@ -400,7 +441,6 @@ class Parser:  # all mutable state
             "alert": Scope.Type(True, Types.FuncPointer([Stringable], Types.Null(), do= True)),
             "log": Scope.Type(True, Types.FuncPointer([Stringable], Types.Null(), do= True)),
             "toString": Scope.Type(True, Types.FuncPointer([Stringable], Types.String(0))),
-
             "isEven": Scope.Type(True, Types.FuncPointer([Types.I32()], Types.Bool)),
             "isOdd": Scope.Type(True, Types.FuncPointer([Types.I32()], Types.Bool)),
             "len": Scope.Type(True, Types.FuncPointer([Lengthable], Types.I32())),
@@ -418,10 +458,12 @@ class Parser:  # all mutable state
             "serial": Scope.Type(True, serial),
             "Some": Scope.Type(True, FuncPointer([Maybe_T], Maybe, generic= Maybe_gen)),
             "None": Scope.Type(True, Maybe),
+            "Ok": Scope.Type(True, FuncPointer([Result_A], Types.replaceT(Result, {"Result.A": Result_A}), generic= Result_gen)),
+            "Error": Scope.Type(True, FuncPointer([Result_B], Types.replaceT(Result, {"Result.B": Result_B}), generic= Result_gen)),
             "println": Scope.Type(True, Types.FuncPointer([Stringable], Types.Null(),do=True), "client"),
             "print": Scope.Type(True, Types.FuncPointer([Stringable], Types.Null(),do=True), "client"),
             "jsonStringify": Scope.Type(True, Types.FuncPointer([All], Types.String(0))),
-            "parseJson": Scope.Type(True, Types.FuncPointer([Types.FuncPointer([All], parseT), Types.String(0)], parseT)),
+            "parseJson": Scope.Type(True, Types.FuncPointer([Types.replaceT(Decoder, {"Decoder.T": parseT}), Types.String(0)], Types.replaceT(Result, {"Result.A": parseT, "Result.B": Types.String()}))),
             "dict": Scope.Type(True, dictFunc),
         }]}
 
@@ -467,6 +509,8 @@ class Parser:  # all mutable state
                 "Any": All,
                 "Maybe": Maybe,
                 "Dict": topDict,
+                "Result": Result,
+                "Decoder": Decoder,
             }
         }
 
